@@ -8,6 +8,9 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `skills/scratchpad/SKILL.md`: gitignored temporary project scratchpad workflow
 - `skills/git/SKILL.md`: git commit and pull request workflow commands
 - `skills/inspector/SKILL.md`: OpenSpec inspection and reconciliation workflows
+- `skills/document/SKILL.md`: focused documentation generation (inline, API, guide, external)
+- `skills/understand/SKILL.md`: multi-specialist codebase understanding analysis
+- `skills/elixir-genius/SKILL.md`: Elixir/Phoenix/LiveView architecture and best practices
 - `agents/claude/`: Claude Code custom agents
 - `agents/opencode/`: OpenCode markdown subagents
 - `agents/codex/`: Codex custom agent TOML files
@@ -49,19 +52,19 @@ npx skills add agoodway/skills --list
 Install the primary skills into the current project for Claude Code, OpenCode, and Codex:
 
 ```bash
-npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector -a claude-code -a opencode -a codex
+npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex
 ```
 
 Install globally instead:
 
 ```bash
-npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector -g -a claude-code -a opencode -a codex -y
+npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill document --skill understand --skill elixir-genius -g -a claude-code -a opencode -a codex -y
 ```
 
 Install from a local checkout:
 
 ```bash
-npx skills add /path/to/skills --skill review-work --skill scratchpad --skill git --skill inspector -a claude-code -a opencode -a codex
+npx skills add /path/to/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex
 ```
 
 Install all skills from this repository:
@@ -73,7 +76,7 @@ npx skills add agoodway/skills --skill '*' -a claude-code -a opencode -a codex
 Use `--copy` if you want copied files instead of symlinks:
 
 ```bash
-npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector -a claude-code -a opencode -a codex --copy
+npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex --copy
 ```
 
 ## Skill Install Locations
@@ -169,7 +172,7 @@ EOF
 Install the skill globally and install all three agent sets globally from a temporary repository checkout:
 
 ```bash
-npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector -g -a claude-code -a opencode -a codex -y
+npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill document --skill understand --skill elixir-genius -g -a claude-code -a opencode -a codex -y
 tmpdir=$(mktemp -d)
 git clone https://github.com/agoodway/skills.git "$tmpdir/skills"
 mkdir -p ~/.claude/agents ~/.config/opencode/agents ~/.codex/agents
@@ -181,7 +184,7 @@ cp "$tmpdir/skills"/agents/codex/*.toml ~/.codex/agents/
 For a single project, run this from that project root:
 
 ```bash
-npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector -a claude-code -a opencode -a codex
+npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex
 tmpdir=$(mktemp -d)
 git clone https://github.com/agoodway/skills.git "$tmpdir/skills"
 mkdir -p .claude/agents .opencode/agents .codex/agents
@@ -225,6 +228,9 @@ Ask your runtime to run the skill:
 /scratchpad bootstrap
 /git help
 /inspector help
+/document lib/my_app/accounts.ex inline
+/understand authentication system
+/elixir-genius
 ```
 
 Or focus the review on a path or area:
