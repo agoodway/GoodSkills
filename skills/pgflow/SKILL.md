@@ -1,6 +1,6 @@
 ---
 name: pgflow
-description: "Work with PgFlow — a PostgreSQL-based workflow engine for Elixir/Phoenix. Dispatches subcommands via `/pgflow [subcommand] [args]`. Use when the user says '/pgflow bootstrap', '/pgflow help', 'add pgflow', 'pgflow flow', 'pgflow job', 'bootstrap pgflow', 'add workflows', or wants to set up, build, or manage PgFlow flows and jobs in a Phoenix project."
+description: "Work with PgFlow — a PostgreSQL-based workflow engine for Elixir/Phoenix. Dispatches subcommands via `/pgflow [subcommand] [args]`. Use when the user says '/pgflow bootstrap', '/pgflow flow', '/pgflow job', '/pgflow step', '/pgflow dashboard', '/pgflow liveview', '/pgflow debug', '/pgflow help', 'add pgflow', 'bootstrap pgflow', 'add workflows', 'new flow', 'new job', 'debug run', or wants to set up, build, or manage PgFlow flows and jobs in a Phoenix project."
 ---
 
 # PgFlow
@@ -11,7 +11,13 @@ Multi-subcommand skill for working with PgFlow — a PostgreSQL-based DAG workfl
 
 | Subcommand | Purpose | Reference |
 |------------|---------|-----------|
-| `bootstrap` | Add PgFlow to an existing Phoenix app (deps, migrations, config, supervision) | [references/bootstrap.md](references/bootstrap.md) |
+| `bootstrap` | Add PgFlow to a Phoenix app (deps, migrations, config, supervision) | [references/bootstrap.md](references/bootstrap.md) |
+| `flow` | Scaffold a new flow module and compile to database | [references/flow.md](references/flow.md) |
+| `job` | Scaffold a new job module and compile to database | [references/job.md](references/job.md) |
+| `step` | Add a step to an existing flow | [references/step.md](references/step.md) |
+| `dashboard` | Add the PgFlow LiveView dashboard to the router | [references/dashboard-setup.md](references/dashboard-setup.md) |
+| `liveview` | Scaffold a LiveView with LiveClient flow tracking | [references/liveview-setup.md](references/liveview-setup.md) |
+| `debug` | Inspect a run — status, step states, errors, retries | [references/debug.md](references/debug.md) |
 
 ### `/pgflow help`
 
@@ -20,16 +26,32 @@ Display a list of all available subcommands. Output the following exactly:
 ```
 /pgflow subcommands:
 
-  bootstrap           — Add PgFlow to a Phoenix app (deps, migrations, config, supervision tree)
-  help                — Show this help message
+  bootstrap             — Add PgFlow to a Phoenix app (deps, migrations, config, supervision tree)
+  flow [Module]         — Scaffold a new flow module and compile to database
+  job [Module]          — Scaffold a new job module and compile to database
+  step [Module] [name]  — Add a step to an existing flow
+  dashboard [path]      — Add the PgFlow LiveView dashboard to the router
+  liveview [Module] [:slug] — Scaffold a LiveView with real-time flow tracking
+  debug [run_id|:slug|failed] — Inspect a run, flow, or recent failures
+  help                  — Show this help message
 ```
 
-More subcommands will be added over time. If `/pgflow` is invoked without a subcommand, show the help output above and ask which to run.
+If `/pgflow` is invoked without a subcommand, show the help output above and ask which to run.
 
 ## Dispatch
 
 1. Parse the subcommand and args from the user's invocation. Examples:
    - `/pgflow bootstrap` → subcommand `bootstrap`, no args
+   - `/pgflow flow MyApp.Flows.ProcessOrder` → subcommand `flow`, arg `MyApp.Flows.ProcessOrder`
+   - `/pgflow job MyApp.Jobs.SendEmail` → subcommand `job`, arg `MyApp.Jobs.SendEmail`
+   - `/pgflow step MyApp.Flows.ProcessOrder notify` → subcommand `step`, args `MyApp.Flows.ProcessOrder notify`
+   - `/pgflow step notify` → subcommand `step`, arg `notify` (ask which flow)
+   - `/pgflow dashboard` → subcommand `dashboard`, no args
+   - `/pgflow dashboard /admin/pgflow` → subcommand `dashboard`, arg `/admin/pgflow`
+   - `/pgflow liveview MyAppWeb.OrderLive :process_order` → subcommand `liveview`, args
+   - `/pgflow debug abc123-uuid` → subcommand `debug`, arg is a run ID
+   - `/pgflow debug :process_order` → subcommand `debug`, arg is a flow slug
+   - `/pgflow debug failed` → subcommand `debug`, show recent failures
    - `/pgflow help` → show help
 2. If the subcommand is unknown, list available subcommands from the table above and stop.
 3. Read the matching reference file from `references/` and follow its workflow exactly.
@@ -80,11 +102,17 @@ Detailed guides available in `references/`:
 | File | Content |
 |------|---------|
 | [bootstrap.md](references/bootstrap.md) | Full bootstrap walkthrough |
+| [flow.md](references/flow.md) | Scaffold a new flow (subcommand reference) |
+| [job.md](references/job.md) | Scaffold a new job (subcommand reference) |
+| [step.md](references/step.md) | Add a step to a flow (subcommand reference) |
+| [dashboard-setup.md](references/dashboard-setup.md) | Add the dashboard (subcommand reference) |
+| [liveview-setup.md](references/liveview-setup.md) | Scaffold a LiveView (subcommand reference) |
+| [debug.md](references/debug.md) | Debug runs and failures (subcommand reference) |
 | [flows.md](references/flows.md) | Flow DSL — step, map, DAG deps, handler context |
 | [jobs.md](references/jobs.md) | Job DSL — perform, cron, jobs vs flows |
 | [config.md](references/config.md) | Configuration options, signal strategies, supervision |
-| [liveview.md](references/liveview.md) | LiveClient real-time tracking in LiveView |
-| [dashboard.md](references/dashboard.md) | Dashboard installation and setup |
+| [liveview.md](references/liveview.md) | LiveClient API reference |
+| [dashboard.md](references/dashboard.md) | Dashboard pages and features |
 | [telemetry.md](references/telemetry.md) | Telemetry events and observability |
 
 $ARGUMENTS
