@@ -12,7 +12,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `agents/opencode/`: OpenCode markdown subagents
 - `agents/codex/`: Codex custom agent TOML files
 
-The `review-work` skill expects the same specialist names across runtimes:
+The `review-work` skill expects these specialist names across runtimes:
 
 - `code-review-expert`
 - `security-engineer`
@@ -24,6 +24,17 @@ The `review-work` skill expects the same specialist names across runtimes:
 - `postgres-expert`
 - `technical-writer`
 - `system-architect`
+
+Additional utility agents (available across all three runtimes):
+
+- `astrojs-expert` — Astro websites, content collections, island architecture
+- `code-reviewer` — General code review with checklist and commit readiness
+- `data-analyst` — SQL queries, business intelligence, data patterns
+- `elixir-qa` — Runs mix precommit with concise issue summaries
+- `refactoring-expert` — Code simplification, technical debt, SOLID patterns
+- `requirements-analyst` — Requirements discovery, PRDs, user stories
+- `root-cause-analyst` — Systematic debugging and evidence-based investigation
+- `tailwind-expert` — Tailwind CSS styling, responsive design, theme configuration
 
 ## Install Skills
 
