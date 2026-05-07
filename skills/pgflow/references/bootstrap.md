@@ -1,11 +1,6 @@
----
-name: bootstrap-pgflow
-description: "Bootstrap PgFlow workflow engine in a Phoenix app. Adds PostgreSQL-backed DAG workflows, background jobs, and cron scheduling with real-time LiveView tracking. Use when the user says 'bootstrap pgflow', 'add pgflow', 'add workflows', 'workflow engine', or wants to add PgFlow to a Phoenix project."
----
+# pgflow bootstrap
 
-# Bootstrap PgFlow
-
-Add PgFlow — a PostgreSQL-based workflow engine — to an existing Phoenix application. PgFlow replaces Redis queues and external orchestration with pure PostgreSQL, using PGMQ for message queuing and OTP for execution.
+Add PgFlow to an existing Phoenix application. This walks through dependency installation, database setup, configuration, supervision tree integration, and creating a first flow and job.
 
 ## Prerequisites
 
@@ -79,7 +74,7 @@ config :my_app, MyApp.PgFlow,
   attach_default_logger: true
 ```
 
-Read [references/config.md](references/config.md) for all configuration options.
+See [config.md](config.md) for all configuration options and signal strategies.
 
 ## Phase 4: Supervision Tree
 
@@ -100,7 +95,7 @@ end
 
 ## Phase 5: Create a Flow
 
-Read [references/flows.md](references/flows.md) for the full Flow DSL reference.
+See [flows.md](flows.md) for the full Flow DSL reference.
 
 ### 5.1 Define the Flow Module
 
@@ -158,7 +153,7 @@ mix ecto.migrate
 
 ## Phase 6: Create a Job (Optional)
 
-Read [references/jobs.md](references/jobs.md) for the Job DSL reference.
+See [jobs.md](jobs.md) for the Job DSL reference.
 
 Create `lib/my_app/jobs/example_job.ex`:
 
@@ -183,18 +178,21 @@ Register, compile, and enqueue:
 config :my_app, MyApp.PgFlow,
   jobs: [MyApp.Jobs.ExampleJob],
   # ...
+```
 
-# Compile to database
-# mix pgflow.gen.job MyApp.Jobs.ExampleJob
-# mix ecto.migrate
+```bash
+mix pgflow.gen.job MyApp.Jobs.ExampleJob
+mix ecto.migrate
+```
 
+```elixir
 # Enqueue
 {:ok, run_id} = PgFlow.enqueue(MyApp.Jobs.ExampleJob, %{"id" => 42})
 ```
 
 ## Phase 7: LiveView Integration (Optional)
 
-Read [references/liveview.md](references/liveview.md) for the LiveClient API.
+See [liveview.md](liveview.md) for the LiveClient API.
 
 ```elixir
 defmodule MyAppWeb.FlowLive do
@@ -220,7 +218,7 @@ end
 
 ## Phase 8: Dashboard (Optional)
 
-Read [references/dashboard.md](references/dashboard.md) for dashboard setup.
+See [dashboard.md](dashboard.md) for dashboard setup.
 
 ```bash
 mix pgflow_dashboard.gen.migration
@@ -249,13 +247,3 @@ end
 - [ ] At least one flow or job defined
 - [ ] Flow/job compiled to database
 - [ ] Flow starts and completes successfully
-
-## Mix Tasks Reference
-
-| Task | Purpose |
-|------|---------|
-| `mix pgflow.copy_migrations` | Copy core schema migrations |
-| `mix pgflow.gen.extensions_migration` | Generate worker extensions migration |
-| `mix pgflow.gen.flow Module` | Generate migration to compile a flow |
-| `mix pgflow.gen.job Module` | Generate migration to compile a job |
-| `mix pgflow.check_schema` | Verify database schema compatibility |
