@@ -11,7 +11,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `skills/document/SKILL.md`: focused documentation generation (inline, API, guide, external)
 - `skills/understand/SKILL.md`: multi-specialist codebase understanding analysis
 - `skills/elixir-genius/SKILL.md`: Elixir/Phoenix/LiveView architecture and best practices
-- `skills/bootstrap-*/SKILL.md`: Phoenix, Go, Zig, and infrastructure bootstrap skills (15 total)
+- `skills/bootstrap-*/SKILL.md`: Phoenix, Astro, Go, Zig, and infrastructure bootstrap skills (21 total)
 - `agents/claude/`: Claude Code custom agents
 - `agents/opencode/`: OpenCode markdown subagents
 - `agents/codex/`: Codex custom agent TOML files
