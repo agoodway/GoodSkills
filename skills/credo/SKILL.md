@@ -53,8 +53,12 @@ Run Credo analysis and report results.
 
 Run Credo and fix all reported issues.
 
-1. Run `mix credo --strict --format json` in the project root.
-2. If Credo exits cleanly with no issues, report success and stop.
+1. **Check for existing Credo output** — if `/credo check` was already run in this conversation and the results are still available:
+   - Show the user the issue count from the previous run.
+   - Ask the user: "Credo check was already run with **N issues** found. Do you want to re-run the check or proceed with fixing the existing issues?"
+   - If the user chooses to proceed, skip to step 3 using the existing results.
+   - If the user chooses to re-run, continue to step 2.
+2. Run `mix credo --strict --format json` in the project root. If Credo exits cleanly with no issues, report success and stop.
 3. If issues are found:
    - Parse the JSON output to get the list of issues with file paths, line numbers, check names, and messages.
    - Group issues by file.
