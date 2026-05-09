@@ -55,7 +55,7 @@ Ask the user: "Which store backend do you want to use?"
 Add to the `deps` function:
 
 ```elixir
-{:durex, "~> 0.1.0"}
+{:durex, github: "agoodway/durex", branch: "main"}
 ```
 
 If the user chose **Tigris**, also add `:req` (Durex declares it as optional):
