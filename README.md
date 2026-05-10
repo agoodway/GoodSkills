@@ -4,6 +4,8 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 
 ## Contents
 
+### Core Skills
+
 - `skills/review-work/SKILL.md`: multi-specialist code review skill
 - `skills/scratchpad/SKILL.md`: gitignored temporary project scratchpad workflow
 - `skills/git/SKILL.md`: git commit and pull request workflow commands
@@ -11,7 +13,52 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `skills/document/SKILL.md`: focused documentation generation (inline, API, guide, external)
 - `skills/understand/SKILL.md`: multi-specialist codebase understanding analysis
 - `skills/elixir-genius/SKILL.md`: Elixir/Phoenix/LiveView architecture and best practices
-- `skills/bootstrap-*/SKILL.md`: Phoenix, Astro, Go, Zig, and infrastructure bootstrap skills (21 total)
+
+### Developer Workflow Skills
+
+- `skills/check/SKILL.md`: run project quality checks via `just check` with auto-fix subcommand
+- `skills/credo/SKILL.md`: run Credo static analysis with check and fix subcommands
+- `skills/justfile/SKILL.md`: generate a justfile for the current project
+- `skills/workie/SKILL.md`: git worktree lifecycle manager with branch-isolated databases
+
+### Elixir/Phoenix Skills
+
+- `skills/durex/SKILL.md`: add GenServer state checkpointing (Redis or Tigris) for crash recovery
+- `skills/horde/SKILL.md`: set up Horde distributed process infrastructure (registry, supervisor, cluster monitor)
+- `skills/pgflow/SKILL.md`: PgFlow PostgreSQL-based workflow engine for Elixir/Phoenix
+
+### CLI Tool Skills
+
+- `skills/goodverify/SKILL.md`: verify emails, phones, and addresses via the GoodVerify CLI
+- `skills/goodissues/SKILL.md`: manage projects and track issues via the GoodIssues CLI
+- `skills/zig-cli/SKILL.md`: build and maintain Zig CLI applications with cross-compilation and OpenAPI client generation
+
+### Bootstrap Skills (21 total)
+
+- `skills/bootstrap-phoenix/SKILL.md`: Phoenix application
+- `skills/bootstrap-astro/SKILL.md`: Astro site
+- `skills/bootstrap-astro-ses/SKILL.md`: Astro site with AWS SES form handling
+- `skills/bootstrap-accounts/SKILL.md`: multi-tenant account-scoped dashboard
+- `skills/bootstrap-api-keys/SKILL.md`: API key management UI and backend
+- `skills/bootstrap-client-ip/SKILL.md`: client IP extraction from proxy headers
+- `skills/bootstrap-credits/SKILL.md`: credit system with Stripe integration
+- `skills/bootstrap-elixir-openapi/SKILL.md`: Elixir API client from OpenAPI spec
+- `skills/bootstrap-events/SKILL.md`: event subscription system
+- `skills/bootstrap-fly-env-sync/SKILL.md`: sync env vars to Fly.io secrets
+- `skills/bootstrap-go-cli/SKILL.md`: Go CLI with Cobra, Viper, and goreleaser
+- `skills/bootstrap-go-openapi/SKILL.md`: Go client from OpenAPI spec
+- `skills/bootstrap-google-analytics/SKILL.md`: Google Analytics (GA4) in Phoenix
+- `skills/bootstrap-mcp/SKILL.md`: MCP server for Phoenix
+- `skills/bootstrap-nebulex/SKILL.md`: Nebulex caching in Phoenix
+- `skills/bootstrap-openapi/SKILL.md`: OpenAPI for Phoenix
+- `skills/bootstrap-phoenix-docker/SKILL.md`: Docker releases for Phoenix
+- `skills/bootstrap-posthog/SKILL.md`: PostHog analytics in Phoenix
+- `skills/bootstrap-postmark/SKILL.md`: Postmark mailer in Phoenix
+- `skills/bootstrap-registration-toggle/SKILL.md`: ENV-based registration toggle
+- `skills/bootstrap-zig-cli/SKILL.md`: Zig CLI application (standalone bootstrap)
+
+### Agents
+
 - `agents/claude/`: Claude Code custom agents
 - `agents/opencode/`: OpenCode markdown subagents
 - `agents/codex/`: Codex custom agent TOML files
