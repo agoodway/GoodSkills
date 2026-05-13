@@ -19,6 +19,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `skills/check/SKILL.md`: run project quality checks via `just check` with auto-fix subcommand
 - `skills/credo/SKILL.md`: run Credo static analysis with check and fix subcommands
 - `skills/justfile/SKILL.md`: generate a justfile for the current project
+- `skills/publish/SKILL.md`: publish a release via `just publish`
 - `skills/workie/SKILL.md`: git worktree lifecycle manager with branch-isolated databases
 
 ### Elixir/Phoenix Skills
