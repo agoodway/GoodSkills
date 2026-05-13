@@ -24,6 +24,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 ### Elixir/Phoenix Skills
 
 - `skills/boruta/SKILL.md`: add OAuth 2.0 and OpenID Connect provider using Boruta
+- `skills/can-opener/SKILL.md`: create and update Elixir API client packages using CanOpener
 - `skills/durex/SKILL.md`: add GenServer state checkpointing (Redis or Tigris) for crash recovery
 - `skills/horde/SKILL.md`: set up Horde distributed process infrastructure (registry, supervisor, cluster monitor)
 - `skills/openapi/SKILL.md`: regenerate OpenAPI specs in Phoenix apps using open_api_spex
