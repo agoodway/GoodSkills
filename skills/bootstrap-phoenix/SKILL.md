@@ -8,7 +8,7 @@ description: "Bootstrap Phoenix Application"
 Set up a new Phoenix application with comprehensive code quality, testing, and development tooling including:
 - Phoenix 1.8+ with LiveView
 - PostgreSQL with binary_id
-- Credo, ExDNA, ExSlop, Doctor, and Dialyxir for code quality
+- Credo, ExDNA, ExSlop, Doctor, Dialyxir, and Sobelow for code quality
 - Oban for background jobs
 - Req for HTTP (never HTTPoison/Tesla)
 - Tidewave for AI agent integration
@@ -132,6 +132,7 @@ defp deps do
     {:ex_slop, github: "dannote/ex_slop", branch: "master", only: [:dev, :test], runtime: false},
     {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
     {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+    {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false},
 
     # Testing
     {:lazy_html, ">= 0.1.0", only: :test},
@@ -198,6 +199,7 @@ defp aliases do
       "format --check-formatted",
       "credo --strict",
       "doctor",
+      "sobelow --config",
       "dialyzer",
       "test"
     ],
@@ -359,7 +361,26 @@ end
 }
 ```
 
-### 3.2 Create Doctor Configuration
+### 3.2 Create Sobelow Configuration
+
+**File:** `.sobelow-conf`
+
+```
+[
+  verbose: false,
+  private: false,
+  skip: false,
+  router: "",
+  exit: "low",
+  format: "txt",
+  ignore: [],
+  ignore_files: []
+]
+```
+
+The `--config` flag in the check alias tells Sobelow to use this file. The `exit: "low"` setting ensures all findings (low, medium, high) cause a non-zero exit code.
+
+### 3.3 Create Doctor Configuration
 
 **File:** `.doctor.exs`
 
@@ -399,7 +420,7 @@ end
 }
 ```
 
-### 3.3 Update Formatter Configuration
+### 3.4 Update Formatter Configuration
 
 **File:** `.formatter.exs`
 
@@ -660,8 +681,9 @@ mix check
 After running this command, you should have:
 
 - [ ] Phoenix project with binary_id and PostgreSQL
-- [ ] All dependencies installed (Credo, ExDNA, ExSlop, Doctor, Dialyxir, Oban, Req, Sentry, Tidewave)
+- [ ] All dependencies installed (Credo, ExDNA, ExSlop, Doctor, Dialyxir, Sobelow, Oban, Req, Sentry, Tidewave)
 - [ ] Credo configuration (.credo.exs)
+- [ ] Sobelow configuration (.sobelow-conf)
 - [ ] Doctor configuration (.doctor.exs)
 - [ ] Updated formatter (.formatter.exs)
 - [ ] Environment files (.env.sample, .env.dev, .env.test)
@@ -699,6 +721,7 @@ mix precommit               # Alias for mix check
 mix format                  # Auto-format code
 mix credo --strict          # Static analysis
 mix doctor                  # Documentation coverage
+mix sobelow --config        # Security analysis
 mix dialyzer                # Type checking
 
 # Testing
