@@ -1,6 +1,6 @@
 ---
 name: inspector
-description: Inspect OpenSpec artifacts for gaps, correctness, consistency, and alignment with other specs/changes and the current codebase. Dispatches subcommands via `/inspector [subcommand] [args]`. Use when the user says "/inspector review", "inspector review", "inspect change", "review the openspec change", "audit the spec", "/inspector review-update", "review and fix", "review and patch", "inspect and fix", "/inspector sync-linear", "sync change to linear", "create linear issue for change", "/inspector commits", "check commits against specs", "are specs up to date", "/inspector reconcile", "reconcile change", "update change from codebase", "sync specs to code", "reconcile specs", "/inspector explain", "explain change", "explain the change", "what does this change do", "/inspector review-work", "verify and review", "verify and fix", "review work and fix", or asks to sanity-check, critique, find gaps, sync with Linear, detect spec drift from recent commits, update a change to match what's actually implemented, explain/visualize a change, or verify implementation and fix review findings.
+description: Inspect OpenSpec artifacts for gaps, correctness, consistency, and alignment with other specs/changes and the current codebase. Dispatches subcommands via `/inspector [subcommand] [args]`. Use when the user says "/inspector review", "inspector review", "inspect change", "review the openspec change", "audit the spec", "/inspector review-update", "review and fix", "review and patch", "inspect and fix", "/inspector sync-linear", "sync change to linear", "create linear issue for change", "/inspector commits", "check commits against specs", "are specs up to date", "/inspector reconcile", "reconcile change", "update change from codebase", "sync specs to code", "reconcile specs", "/inspector explain", "explain change", "explain the change", "what does this change do", "/inspector mockups", "mock up the UI", "generate mockups", "ascii mockups", "wireframe the change", "/inspector flows", "diagram the flows", "generate flow diagrams", "process diagrams", "workflow diagrams", "/inspector review-work", "verify and review", "verify and fix", "review work and fix", or asks to sanity-check, critique, find gaps, sync with Linear, detect spec drift from recent commits, update a change to match what's actually implemented, explain/visualize a change, generate UI mockups or process flow diagrams, or verify implementation and fix review findings.
 ---
 
 # Inspector
@@ -30,6 +30,8 @@ Prefer direct Glob/Grep/Read over broad shell scans when the runtime provides th
 | `commits` | Detect recent commits that require OpenSpec spec/change updates | [references/commits.md](references/commits.md) |
 | `reconcile` | Update a change's artifacts to match the current codebase state | [references/reconcile.md](references/reconcile.md) |
 | `explain`  | Explain a change with prose, ASCII diagrams, and ASCII mockups | [references/explain.md](references/explain.md) |
+| `mockups`  | Generate detailed ASCII mockups of all UI proposed in a change | [references/mockups.md](references/mockups.md) |
+| `flows`    | Generate ASCII diagrams of all process workflows in a change | [references/flows.md](references/flows.md) |
 | `review-work` | Verify implementation, run code review, and fix all findings | [references/review-work.md](references/review-work.md) |
 
 ### `/inspector help`
@@ -45,6 +47,8 @@ Display a list of all available subcommands. Output the following exactly:
   commits                   — Detect recent commits that require spec/change updates
   reconcile [change-id]     — Update a change's artifacts to match the current codebase
   explain [change-id]       — Explain a change with prose, ASCII diagrams, and mockups
+  mockups [change-id]       — Generate detailed ASCII mockups of all UI in a change
+  flows [change-id]         — Generate ASCII diagrams of all process workflows
   review-work [change-id]   — Verify implementation, review code, and fix all findings
   help                      — Show this help message
 ```
