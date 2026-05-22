@@ -2,7 +2,7 @@
 
 Generate detailed ASCII mockups of **every** UI surface proposed in an OpenSpec change. Where `/inspector explain` includes a single summary wireframe, `mockups` produces a comprehensive set covering every screen, modal, component, and state.
 
-This is a read-only operation. The only file written is `openspec/changes/<change-id>/inspector-mockups.md`.
+This operation writes `openspec/changes/<change-id>/inspector-mockups.md` and adds a reference to it in the change's `design.md` (or `proposal.md` if no `design.md` exists).
 
 ## Inputs
 
@@ -161,7 +161,25 @@ For each page or component, consider and mock (where applicable):
 
 Only mock states that the change actually specifies or implies. Do not invent states the proposal doesn't mention.
 
-### 4. Summarize in chat
+### 4. Add reference to change artifacts
+
+After writing the mockups file, add a reference link to the change's `design.md`. If `design.md` does not exist, add it to `proposal.md` instead.
+
+**Where to place the reference:**
+- Look for an existing `## References` or `## Artifacts` section at the bottom of the file. If found, append to it.
+- If no such section exists, add a `## References` section at the end of the file.
+
+**What to add:**
+
+```markdown
+## References
+
+- [UI Mockups](inspector-mockups.md) — ASCII wireframes for all UI surfaces (<YYYY-MM-DD>)
+```
+
+If the section already exists and contains other references, append the new line without duplicating. If a previous `inspector-mockups.md` reference exists, update the date.
+
+### 5. Summarize in chat
 
 After writing, print to chat:
 - Total number of surfaces mocked
@@ -171,8 +189,8 @@ After writing, print to chat:
 
 ## Guardrails
 
-- **Read-only on OpenSpec**: do not edit `proposal.md`, `tasks.md`, `design.md`, or any delta spec.
-- **No td issues, no git commits, no branch changes**: mockups is a pure documentation tool.
+- **Minimal OpenSpec edits**: only append a reference link to `design.md` or `proposal.md`. Do not modify any other content in those files. Do not edit `tasks.md` or any delta spec.
+- **No td issues, no git commits, no branch changes**: mockups is a documentation tool.
 - **Accuracy over aesthetics**: only mock UI that the change artifacts describe. Do not invent screens or features not in the proposal.
 - **Scope to this change**: do not mock unrelated parts of the application.
 - **Realistic data**: use plausible sample data that matches the domain, not generic placeholders.

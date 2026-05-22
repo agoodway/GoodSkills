@@ -67,7 +67,7 @@ More subcommands will be added over time. If `/inspector` is invoked without a s
 ## Conventions shared across subcommands
 
 - **OpenSpec layout**: changes live in `openspec/changes/<change-id>/` with `proposal.md`, `tasks.md`, optional `design.md`, and delta specs at `specs/<capability>/spec.md`. Canonical specs live in `openspec/specs/<capability>/spec.md`.
-- **Read-only on OpenSpec files**: never modify proposals, deltas, or tasks during inspection. Inspector only writes its own report artifacts. Exception: `review-update` and `reconcile` explicitly modify change artifacts as part of their workflow. `review-work` modifies codebase files (not OpenSpec files) to fix review findings.
+- **Read-only on OpenSpec files**: never modify proposals, deltas, or tasks during inspection. Inspector only writes its own report artifacts. Exceptions: `review-update` and `reconcile` explicitly modify change artifacts as part of their workflow. `review-work` modifies codebase files (not OpenSpec files) to fix review findings. `explain`, `mockups`, and `flows` append a reference link to `design.md` (or `proposal.md` if no `design.md` exists) pointing to their generated artifact.
 - **Report location**: write reports to `openspec/changes/<change-id>/inspector-<subcommand>.md` so they travel with the change and get archived with it.
 - **Cite file:line** for every concrete finding so the reader can jump to the source.
 - **Severity tiers**: Critical (blocks implementation/archiving), Warning (should fix before landing), Suggestion (nice-to-have).

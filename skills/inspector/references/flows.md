@@ -2,7 +2,7 @@
 
 Generate detailed ASCII diagrams of **every** process workflow proposed in an OpenSpec change. Where `/inspector explain` includes a summary architecture diagram, `flows` produces a comprehensive set covering every user flow, data pipeline, state machine, and system interaction.
 
-This is a read-only operation. The only file written is `openspec/changes/<change-id>/inspector-flows.md`.
+This operation writes `openspec/changes/<change-id>/inspector-flows.md` and adds a reference to it in the change's `design.md` (or `proposal.md` if no `design.md` exists).
 
 ## Inputs
 
@@ -213,7 +213,25 @@ Each flow entry MUST include:
 - Show realistic function/module names from the codebase where known
 - Include timing/async markers where relevant (e.g., "async", "5s timeout")
 
-### 4. Summarize in chat
+### 4. Add reference to change artifacts
+
+After writing the flows file, add a reference link to the change's `design.md`. If `design.md` does not exist, add it to `proposal.md` instead.
+
+**Where to place the reference:**
+- Look for an existing `## References` or `## Artifacts` section at the bottom of the file. If found, append to it.
+- If no such section exists, add a `## References` section at the end of the file.
+
+**What to add:**
+
+```markdown
+## References
+
+- [Process Flows](inspector-flows.md) — ASCII diagrams of all process workflows (<YYYY-MM-DD>)
+```
+
+If the section already exists and contains other references, append the new line without duplicating. If a previous `inspector-flows.md` reference exists, update the date.
+
+### 5. Summarize in chat
 
 After writing, print to chat:
 - Total number of flows diagrammed
@@ -223,8 +241,8 @@ After writing, print to chat:
 
 ## Guardrails
 
-- **Read-only on OpenSpec**: do not edit `proposal.md`, `tasks.md`, `design.md`, or any delta spec.
-- **No td issues, no git commits, no branch changes**: flows is a pure documentation tool.
+- **Minimal OpenSpec edits**: only append a reference link to `design.md` or `proposal.md`. Do not modify any other content in those files. Do not edit `tasks.md` or any delta spec.
+- **No td issues, no git commits, no branch changes**: flows is a documentation tool.
 - **Accuracy over aesthetics**: only diagram processes that the change artifacts describe. Do not invent flows not in the proposal.
 - **Scope to this change**: do not diagram unrelated parts of the system.
 - **Use real names**: reference actual module names, function names, and routes from the codebase where they exist or are specified in the change.

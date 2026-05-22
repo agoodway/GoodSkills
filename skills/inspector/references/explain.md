@@ -2,7 +2,7 @@
 
 Explain a single OpenSpec change using a combination of **prose**, **ASCII diagrams**, and **ASCII mockups** so that any team member can quickly understand what the change does, why it matters, and how it affects the system.
 
-This is a read-only operation. The only file written is `openspec/changes/<change-id>/inspector-explain.md`.
+This operation writes `openspec/changes/<change-id>/inspector-explain.md` and adds a reference to it in the change's `design.md` (or `proposal.md` if no `design.md` exists).
 
 ## Inputs
 
@@ -146,7 +146,25 @@ BEFORE:                          AFTER:
 - Use `(new)` or `(changed)` annotations to highlight what the change introduces
 - Use `░` fill for placeholder/content areas in UI mockups
 
-### 3. Summarize in chat
+### 3. Add reference to change artifacts
+
+After writing the explanation file, add a reference link to the change's `design.md`. If `design.md` does not exist, add it to `proposal.md` instead.
+
+**Where to place the reference:**
+- Look for an existing `## References` or `## Artifacts` section at the bottom of the file. If found, append to it.
+- If no such section exists, add a `## References` section at the end of the file.
+
+**What to add:**
+
+```markdown
+## References
+
+- [Explanation](inspector-explain.md) — prose summary, ASCII diagrams, and mockups (<YYYY-MM-DD>)
+```
+
+If the section already exists and contains other references, append the new line without duplicating. If a previous `inspector-explain.md` reference exists, update the date.
+
+### 4. Summarize in chat
 
 After writing, print to chat:
 - The TL;DR section verbatim
@@ -156,7 +174,7 @@ After writing, print to chat:
 
 ## Guardrails
 
-- **Read-only on OpenSpec**: do not edit `proposal.md`, `tasks.md`, `design.md`, or any delta spec.
-- **No td issues, no git commits, no branch changes**: explain is a pure documentation tool.
+- **Minimal OpenSpec edits**: only append a reference link to `design.md` or `proposal.md`. Do not modify any other content in those files. Do not edit `tasks.md` or any delta spec.
+- **No td issues, no git commits, no branch changes**: explain is a documentation tool.
 - **Accuracy over aesthetics**: only diagram what you can verify from the actual artifacts and codebase. Do not invent details for the sake of a prettier diagram.
 - **Scope to this change**: do not explain unrelated systems or propose improvements.
