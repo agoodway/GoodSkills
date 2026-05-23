@@ -1,6 +1,18 @@
 ---
 name: inspector
-description: Inspect OpenSpec artifacts for gaps, correctness, consistency, and alignment with other specs/changes and the current codebase. Dispatches subcommands via `/inspector [subcommand] [args]`. Use when the user says "/inspector review", "inspector review", "inspect change", "review the openspec change", "audit the spec", "/inspector review-update", "review and fix", "review and patch", "inspect and fix", "/inspector sync-linear", "sync change to linear", "create linear issue for change", "/inspector commits", "check commits against specs", "are specs up to date", "/inspector reconcile", "reconcile change", "update change from codebase", "sync specs to code", "reconcile specs", "/inspector explain", "explain change", "explain the change", "what does this change do", "/inspector mockups", "mock up the UI", "generate mockups", "ascii mockups", "wireframe the change", "/inspector flows", "diagram the flows", "generate flow diagrams", "process diagrams", "workflow diagrams", "/inspector review-work", "verify and review", "verify and fix", "review work and fix", or asks to sanity-check, critique, find gaps, sync with Linear, detect spec drift from recent commits, update a change to match what's actually implemented, explain/visualize a change, generate UI mockups or process flow diagrams, or verify implementation and fix review findings.
+description: >
+  Inspect OpenSpec artifacts for gaps, correctness, consistency, and codebase alignment.
+  Dispatches subcommands via `/inspector [subcommand] [args]`.
+  Use when the user says "/inspector review", "inspect change", "audit the spec",
+  "/inspector review-update", "review and fix", "/inspector sync-linear",
+  "/inspector commits", "check commits against specs",
+  "/inspector reconcile", "reconcile specs", "sync specs to code",
+  "/inspector explain", "explain the change",
+  "/inspector mockups", "generate mockups", "wireframe the change",
+  "/inspector flows", "generate flow diagrams", "workflow diagrams",
+  "/inspector review-work", "verify and review",
+  or asks to sanity-check, critique, find gaps, generate UI mockups,
+  process flow diagrams, or verify implementation.
 ---
 
 # Inspector
