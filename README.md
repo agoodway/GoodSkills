@@ -35,9 +35,10 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 
 - `skills/goodverify/SKILL.md`: verify emails, phones, and addresses via the GoodVerify CLI
 - `skills/goodissues/SKILL.md`: manage projects and track issues via the GoodIssues CLI
+- `skills/goodissues-reporter/SKILL.md`: set up GoodIssuesReporter error tracking and monitoring in Phoenix
 - `skills/zig-cli/SKILL.md`: build and maintain Zig CLI applications with cross-compilation and OpenAPI client generation
 
-### Bootstrap Skills (21 total)
+### Bootstrap Skills (23 total)
 
 - `skills/bootstrap-phoenix/SKILL.md`: Phoenix application
 - `skills/bootstrap-astro/SKILL.md`: Astro site
@@ -47,6 +48,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `skills/bootstrap-client-ip/SKILL.md`: client IP extraction from proxy headers
 - `skills/bootstrap-credits/SKILL.md`: credit system with Stripe integration
 - `skills/bootstrap-elixir-openapi/SKILL.md`: Elixir API client from OpenAPI spec
+- `skills/bootstrap-env-banner/SKILL.md`: non-production environment warning banner
 - `skills/bootstrap-events/SKILL.md`: event subscription system
 - `skills/bootstrap-fly-env-sync/SKILL.md`: sync env vars to Fly.io secrets
 - `skills/bootstrap-go-cli/SKILL.md`: Go CLI with Cobra, Viper, and goreleaser
@@ -59,6 +61,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `skills/bootstrap-posthog/SKILL.md`: PostHog analytics in Phoenix
 - `skills/bootstrap-postmark/SKILL.md`: Postmark mailer in Phoenix
 - `skills/bootstrap-registration-toggle/SKILL.md`: ENV-based registration toggle
+- `skills/bootstrap-user-management/SKILL.md`: account member management UI and backend
 - `skills/bootstrap-zig-cli/SKILL.md`: Zig CLI application (standalone bootstrap)
 
 ### Agents
