@@ -37,6 +37,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `skills/goodissues/SKILL.md`: manage projects and track issues via the GoodIssues CLI
 - `skills/goodissues-reporter/SKILL.md`: set up GoodIssuesReporter error tracking and monitoring in Phoenix
 - `skills/searchapi/SKILL.md`: SearchAPI.io CLI (Google Jobs, Events, News, Maps, Zillow, Locations)
+- `skills/listex/SKILL.md`: Listex/Yocal city platform CLI (content, city-scoped pages, email broadcasts)
 - `skills/zig-cli/SKILL.md`: build and maintain Zig CLI applications with cross-compilation and OpenAPI client generation
 
 ### Bootstrap Skills (23 total)
