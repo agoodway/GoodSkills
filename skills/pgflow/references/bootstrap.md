@@ -115,7 +115,7 @@ defmodule MyApp.Flows.ExampleFlow do
 
   step :process, depends_on: [:validate] do
     fn deps, _ctx ->
-      %{processed: true, source: deps.validate}
+      %{processed: true, source: deps["validate"]}
     end
   end
 

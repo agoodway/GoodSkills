@@ -41,6 +41,8 @@ If not already clear from the args, ask:
 - What should this step do?
 - What does it depend on? (suggest terminal steps as likely candidates)
 - Is it a single step or a map step (processes array items)?
+- Should it always run, or only for certain inputs? ("only for premium users", "unless X", "skip when...") — if conditional, use `if:`/`if_not:` per [conditional-steps.md](conditional-steps.md)
+- If it can fail permanently, should that fail the run, or should the step be skipped (`when_exhausted: :skip`)?
 
 ### 4. Determine Step Placement
 
@@ -54,6 +56,8 @@ Based on the user's description and the existing DAG:
 | "for each item from X" | `map` step with `array: :x` |
 | "at the beginning" / "before everything" | Root step (no `depends_on`), update existing root steps to depend on it |
 | "between validate and process" | `depends_on: [:validate]`, update `:process` to depend on new step |
+| "only when/if ..." / "unless ..." | Add `if:`/`if_not:` pattern; pick `when_unmet:` (`:skip` just this step, `:skip_cascade` its subtree, `:fail` abort) |
+| "optional" / "shouldn't break the run" | `when_exhausted: :skip` (fail-soft) |
 
 ### 5. Generate the Step
 
@@ -104,7 +108,7 @@ step :process, depends_on: [:enrich] do
 After modifying the flow module, regenerate and migrate:
 
 ```bash
-mix pgflow.gen.flow MyApp.Flows.ProcessOrder
+mix pgflow.gen.flow_migration MyApp.Flows.ProcessOrder
 mix ecto.migrate
 ```
 
@@ -130,6 +134,9 @@ validate → enrich → process → notify
 | `timeout` | integer | flow default | Override execution timeout |
 | `start_delay` | integer | 0 | Delay before step starts (seconds) |
 | `array` | atom | nil | For map steps: step whose output to iterate |
+| `if` / `if_not` | map | nil | Input-pattern gate (jsonb containment) — [conditional-steps.md](conditional-steps.md) |
+| `when_unmet` | atom | `:skip` | `:fail`/`:skip`/`:skip_cascade` when the gate is unsatisfied |
+| `when_exhausted` | atom | `:fail` | `:fail`/`:skip`/`:skip_cascade` when retries are exhausted |
 
 ## Guardrails
 
@@ -139,3 +146,5 @@ validate → enrich → process → notify
 - If inserting between steps, update both the new step's `depends_on` and the downstream step's `depends_on`
 - Always recompile to database after modifying steps
 - Handler return values must be JSON-serializable
+- `when_unmet:` requires `if:` or `if_not:` on the same step; dependent-step patterns must be string-keyed under the dependency's slug (`if: %{"dep_slug" => %{...}}`)
+- Dependents of a `:skip` (non-cascade) step still run with that dependency's key **missing** from their deps map — handle it with `Map.get/3`, or use `:skip_cascade`

@@ -40,9 +40,9 @@ end
 | **Flows** | Flow definitions with 24h statistics |
 | **Jobs** | Job definitions with statistics |
 | **Crons** | Scheduled tasks with next run times |
-| **Runs** | Filterable list with status, duration, progress |
+| **Runs** | Filterable list with status, duration, progress (skipped steps count toward progress) |
 | **Workers** | Worker health status and throughput |
-| **Run Detail** | Interactive SVG DAG visualization, timeline, input/output inspection |
+| **Run Detail** | Interactive SVG DAG visualization, Gantt timeline, input/output inspection; skipped steps render distinctly (dashed/ghost) with their skip_reason |
 
 ## Access Control
 

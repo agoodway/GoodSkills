@@ -1,6 +1,6 @@
 ---
 name: pgflow
-description: "Work with PgFlow — a PostgreSQL-based workflow engine for Elixir/Phoenix. Dispatches subcommands via `/pgflow [subcommand] [args]`. Use when the user says '/pgflow bootstrap', '/pgflow flow', '/pgflow job', '/pgflow step', '/pgflow dashboard', '/pgflow liveview', '/pgflow debug', '/pgflow help', 'add pgflow', 'bootstrap pgflow', 'add workflows', 'new flow', 'new job', 'debug run', or wants to set up, build, or manage PgFlow flows and jobs in a Phoenix project."
+description: "Work with PgFlow — a PostgreSQL-based workflow engine for Elixir/Phoenix. Dispatches subcommands via `/pgflow [subcommand] [args]`. Use when the user says '/pgflow bootstrap', '/pgflow flow', '/pgflow job', '/pgflow step', '/pgflow dashboard', '/pgflow liveview', '/pgflow debug', '/pgflow help', 'add pgflow', 'bootstrap pgflow', 'add workflows', 'new flow', 'new job', 'debug run', wants to set up, build, or manage PgFlow flows and jobs in a Phoenix project, or wants conditional/branching workflow behavior — run a step only if/unless some input matches, skip a step or its subtree, gate a step on plan/feature-flag, make a step fail-soft (skip instead of failing the run when retries are exhausted), or asks about if:, if_not:, when_unmet:, when_exhausted:, skipped steps, or skip_reason."
 ---
 
 # PgFlow
@@ -65,6 +65,7 @@ These core concepts apply across all subcommands:
 - **Jobs**: Single-step background tasks defined with `use PgFlow.Job` and `perform` macro
 - **Runs**: Instances of a flow/job execution, tracked in `pgflow.runs`
 - **Steps**: Individual units of work in a flow, forming a DAG via `depends_on:`
+- **Conditional steps**: `if:`/`if_not:` input-pattern gates with `when_unmet:` and `when_exhausted:` skip/fail behavior — see [references/conditional-steps.md](references/conditional-steps.md)
 - **PGMQ**: PostgreSQL Message Queue — the underlying queue transport
 - **LiveClient**: `PgFlow.LiveClient` for real-time flow tracking in LiveView
 
@@ -89,10 +90,10 @@ These core concepts apply across all subcommands:
 
 | Task | Purpose |
 |------|---------|
-| `mix pgflow.copy_migrations` | Copy core schema migrations |
-| `mix pgflow.gen.extensions_migration` | Generate worker extensions migration |
-| `mix pgflow.gen.flow Module` | Generate migration to compile a flow |
-| `mix pgflow.gen.job Module` | Generate migration to compile a job |
+| `mix pgflow.setup` | Install core schema, pgmq, and helpers migrations |
+| `mix pgflow.gen.postgres_extensions_migration` | Generate Postgres extensions migration |
+| `mix pgflow.gen.flow_migration Module` | Generate migration to compile a flow |
+| `mix pgflow.gen.job_migration Module` | Generate migration to compile a job |
 | `mix pgflow.check_schema` | Verify database schema compatibility |
 
 ### Reference Files
@@ -109,6 +110,7 @@ Detailed guides available in `references/`:
 | [liveview-setup.md](references/liveview-setup.md) | Scaffold a LiveView (subcommand reference) |
 | [debug.md](references/debug.md) | Debug runs and failures (subcommand reference) |
 | [flows.md](references/flows.md) | Flow DSL — step, map, DAG deps, handler context |
+| [conditional-steps.md](references/conditional-steps.md) | Conditional execution — if/if_not gates, when_unmet, when_exhausted, skip semantics |
 | [jobs.md](references/jobs.md) | Job DSL — perform, cron, jobs vs flows |
 | [config.md](references/config.md) | Configuration options, signal strategies, supervision |
 | [liveview.md](references/liveview.md) | LiveClient API reference |

@@ -38,7 +38,7 @@ def handle_info({:pgflow, _, _} = msg, socket) do
 end
 ```
 
-LiveClient receives PubSub messages and applies incremental updates to the in-memory run struct. Status only advances forward: `created` → `started` → `completed`/`failed`.
+LiveClient receives PubSub messages and applies incremental updates to the in-memory run struct. Status only advances forward: `created` → `started` → `completed`/`failed`/`skipped`. One deliberate exception: a step shown as `failed` can still transition to `skipped` — for `when_exhausted: :skip` steps the failure event races ahead of the database's skip decision, and the authoritative skip replaces it. Render `skipped` as its own visual state (dimmed/dashed, not an error); a skipped step's `skip_reason` says why. See [conditional-steps.md](conditional-steps.md).
 
 ### Rendering Run State
 

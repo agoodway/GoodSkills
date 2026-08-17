@@ -16,12 +16,21 @@ PgFlow emits telemetry events for monitoring, metrics, and observability.
 [:pgflow, :worker, :task, :exception]  # Task execution raised
 ```
 
+### Step Events
+
+```elixir
+[:pgflow, :step, :skipped]    # Step skipped without running (conditional gate,
+                              # cascade, or when_exhausted skip)
+```
+
+Metadata: `flow_slug`, `run_id`, `step_slug`, `skip_reason` (`"condition_unmet"`, `"dependency_skipped"`, or `"handler_failed"`). Delivery is exactly-once per emitter, not globally — handlers needing global exactly-once should dedupe on `{run_id, step_slug}`. See [conditional-steps.md](conditional-steps.md).
+
 ### Run Events
 
 ```elixir
 [:pgflow, :run, :started]     # Run transitioned to started
-[:pgflow, :run, :completed]   # Run completed successfully
-[:pgflow, :run, :failed]      # Run failed (step exhausted retries)
+[:pgflow, :run, :completed]   # Run completed successfully (skipped steps count as resolved)
+[:pgflow, :run, :failed]      # Run failed (step exhausted retries with when_exhausted: :fail)
 ```
 
 ## Attaching Handlers

@@ -38,12 +38,14 @@ WHERE r.id = 'run-uuid-here';
 ```
 
 ```sql
-SELECT ss.step_slug, ss.status, ss.output, ss.error_message,
-       ss.attempts_made, ss.inserted_at, ss.updated_at
+SELECT ss.step_slug, ss.status, ss.skip_reason, ss.output, ss.error_message,
+       ss.attempts_made, ss.skipped_at, ss.inserted_at, ss.updated_at
 FROM pgflow.step_states ss
 WHERE ss.run_id = 'run-uuid-here'
 ORDER BY ss.inserted_at;
 ```
+
+Step statuses: `created`, `started`, `completed`, `failed`, and `skipped`. A `skipped` step carries a `skip_reason` — `condition_unmet` (its `if:`/`if_not:` gate), `dependency_skipped` (cascade from a skipped dependency), or `handler_failed` (`when_exhausted: :skip` after retries). Skipped steps are expected outcomes, not errors: a run with skipped steps still completes. See [conditional-steps.md](conditional-steps.md).
 
 For detailed task-level info (individual attempts):
 
@@ -133,6 +135,9 @@ When analyzing failures, check for these patterns:
 | First attempt succeeds, others fail | Intermittent errors | Race condition or non-idempotent handler |
 | Step stuck in `started` | Never completes | Worker crashed mid-execution, stalled task |
 | Run stuck with `remaining_steps > 0` | Not all steps completed | Dependency chain broken or worker not running |
+| Step unexpectedly `skipped` (`condition_unmet`) | Handler never ran | `if:`/`if_not:` pattern doesn't match the input — check key types (patterns are string-keyed; dependent-step patterns nest under the dep's slug) |
+| Step always runs despite `if:` | Condition ignored | Installed pgflow predates conditional support and silently ignores the options — check `pgflow.steps` for `when_unmet`/`required_input_pattern` columns |
+| Step `skipped` (`handler_failed`) but run completed | Errors "disappearing" | `when_exhausted: :skip` fail-soft behavior — the failure is in the step's task attempts, not the run status |
 
 ### 5. Check Worker Health
 

@@ -18,7 +18,7 @@ end
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `queue` | atom | required | Unique queue identifier (becomes PGMQ queue name) |
+| `queue` | atom | required | Unique queue identifier (becomes PGMQ queue name). `slug:` is accepted as an alias, but prefer `queue:` |
 | `max_attempts` | integer | 3 | Maximum retry attempts per step |
 | `base_delay` | integer | 5 | Initial backoff delay in seconds |
 | `timeout` | integer | 60 | Execution timeout per step in seconds |
@@ -43,9 +43,10 @@ Dependent steps receive a map of dependency outputs:
 ```elixir
 step :charge, depends_on: [:validate, :lookup_customer] do
   fn deps, ctx ->
-    # deps.validate => output of :validate step
-    # deps.lookup_customer => output of :lookup_customer step
-    %{charged: true, amount: deps.validate["amount"]}
+    # deps is string-keyed: %{"dep_slug" => output}
+    # deps["validate"] => output of :validate step
+    # deps["lookup_customer"] => output of :lookup_customer step
+    %{charged: true, amount: deps["validate"]["amount"]}
   end
 end
 ```
@@ -76,6 +77,10 @@ The `:array` option specifies which dependency step produces the array to iterat
 | `timeout` | integer | flow default | Override execution timeout |
 | `start_delay` | integer | 0 | Delay before step starts (seconds) |
 | `array` | atom | nil | For map steps: which step's output to iterate |
+| `if` | map | nil | Run only if the step's input contains this pattern (jsonb `@>`) — see [conditional-steps.md](conditional-steps.md) |
+| `if_not` | map | nil | Run only if the step's input does NOT contain this pattern |
+| `when_unmet` | `:fail`/`:skip`/`:skip_cascade` | `:skip` | Outcome when `if`/`if_not` is unsatisfied (requires one of them) |
+| `when_exhausted` | `:fail`/`:skip`/`:skip_cascade` | `:fail` | Outcome when retries are exhausted — `:skip` makes a step fail-soft |
 
 ## Handler Context
 
@@ -122,8 +127,10 @@ All return values must be JSON-serializable (maps, lists, strings, numbers, bool
 
 - Steps form a directed acyclic graph (DAG) — no cycles allowed
 - Steps with no `depends_on` are root steps and run immediately
-- A step runs only after ALL its dependencies complete successfully
-- If any step fails (exhausts retries), the entire run fails
+- A step runs only after ALL its dependencies are resolved (completed, or skipped without cascade)
+- If a step exhausts its retries with `when_exhausted: :fail` (the default), the entire run fails; with `:skip`/`:skip_cascade` the step is marked skipped and the run continues
+- A skipped (non-cascade) dependency's key is **omitted** from dependent inputs — dependents still run; `:skip_cascade` skips the dependents too. See [conditional-steps.md](conditional-steps.md)
+- Runs containing skipped steps complete successfully — skipped counts as resolved, not failed
 - Map steps expand at runtime based on the array length
 - Multiple root steps run in parallel
 
@@ -151,7 +158,7 @@ defmodule MyApp.Flows.ProcessOrder do
   # Waits for both root steps
   step :reserve_inventory, depends_on: [:validate_order, :lookup_inventory] do
     fn deps, _ctx ->
-      %{reserved: true, items: deps.lookup_inventory["items"]}
+      %{reserved: true, items: deps["lookup_inventory"]["items"]}
     end
   end
 
@@ -183,7 +190,7 @@ end
 Flows must be compiled to the database before workers can process them:
 
 ```bash
-mix pgflow.gen.flow MyApp.Flows.ProcessOrder
+mix pgflow.gen.flow_migration MyApp.Flows.ProcessOrder
 mix ecto.migrate
 ```
 
