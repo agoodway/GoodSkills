@@ -90,8 +90,9 @@ These core concepts apply across all subcommands:
 
 | Task | Purpose |
 |------|---------|
-| `mix pgflow.setup` | Install core schema, pgmq, and helpers migrations |
-| `mix pgflow.gen.postgres_extensions_migration` | Generate Postgres extensions migration |
+| `mix pgflow.gen.postgres_extensions_migration` | citext, pg_trgm, pgcrypto, pg_cron (`--no-cron` if unavailable) |
+| `mix pgflow.gen.pgmq_migration` | SQL-only pgmq install (skip if the host already ships pgmq) |
+| `mix pgflow.setup` | Wrapper migration: pgflow schema + Elixir helpers (`--dashboard` optional) |
 | `mix pgflow.gen.flow_migration Module` | Generate migration to compile a flow |
 | `mix pgflow.gen.job_migration Module` | Generate migration to compile a job |
 | `mix pgflow.check_schema` | Verify database schema compatibility |

@@ -2,7 +2,7 @@
 name: bootstrap-credits
 description: >
   Bootstrap a credit system with Stripe integration in a Phoenix 1.8 app. Generates migrations,
-  schemas, context module, billing modules, Stripe webhook controller, Oban worker, LiveView
+  schemas, context module, billing modules, Stripe webhook controller, PgFlow job, LiveView
   purchase and history pages, and JS hook. Checks what already exists and only adds missing pieces.
   Use when the user says "bootstrap credits", "add credit system", "add billing", "stripe credits",
   "credit purchase", or wants to add a prepaid credit system with Stripe to a Phoenix app.
@@ -19,7 +19,7 @@ Add a complete prepaid credit system with Stripe payment integration to a Phoeni
 3. **Usage Events** — Per-operation tracking with cost, cache status, metadata
 4. **Billing** — Credit pack configuration, Stripe PaymentIntent creation, customer lifecycle
 5. **Stripe Webhook** — Signature verification, event routing, idempotent credit fulfillment
-6. **Oban Worker** — Async credit fulfillment with deduplication
+6. **PgFlow Job** — Async credit fulfillment with deduplication
 7. **LiveView Pages** — Purchase page with Stripe Payment Element, balance/history page
 8. **JS Hook** — Stripe.js lazy-loading and Payment Element mounting
 
@@ -29,7 +29,7 @@ Verify before starting:
 1. Phoenix 1.8 app with `phx.gen.auth` completed
 2. Multi-tenant account model exists (accounts table with users)
 3. DaisyUI installed for UI components
-4. Oban configured for background jobs
+4. PgFlow configured for background jobs (see bootstrap-phoenix / `/pgflow bootstrap`)
 5. Nebulex or similar cache configured (optional — skip caching if absent)
 
 ## App Name Detection
@@ -47,9 +47,9 @@ Detect the app module name from `mix.exs` (e.g., `MyApp`) and the OTP app name (
 
 ### Discovery Checklist
 
-1. **Dependencies** — Check `mix.exs` for `stripity_stripe` and `oban`
+1. **Dependencies** — Check `mix.exs` for `stripity_stripe` and `pgflow`
    - If `stripity_stripe` missing: add to deps and tell user to run `mix deps.get`
-   - If `oban` missing: add to deps or warn user
+   - If `pgflow` missing: add `{:pgflow, github: "agoodway/pgflow", branch: "main"}` and warn the user to run `/pgflow bootstrap` (or follow bootstrap-phoenix Phase 7) before continuing
 
 2. **Migrations** — Search `priv/repo/migrations/` for credit-related tables
    - `Glob("priv/repo/migrations/*credit*")` and `Grep("credit_balances|credit_transactions|usage_events", path: "priv/repo/migrations/")`
@@ -157,7 +157,8 @@ Create:
 - `Billing` — credit pack configuration helpers
 - `Billing.Payments` — Stripe PaymentIntent creation
 - `Billing.StripeCustomers` — lazy Stripe customer creation and persistence
-- `Billing.CreditPurchaseWorker` — Oban worker for idempotent credit fulfillment
+- `Billing.CreditPurchaseWorker` — PgFlow job for idempotent credit fulfillment
+- Register the job in `:my_app, PgFlow` `jobs:` and compile with `mix pgflow.gen.job_migration MyApp.Billing.CreditPurchaseWorker`
 
 ### Step 6: Stripe Webhook
 

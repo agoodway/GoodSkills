@@ -71,7 +71,7 @@ Rules for generating the module:
 Read `config/config.exs` and add the new module to the `flows:` list:
 
 ```elixir
-config :my_app, MyApp.PgFlow,
+config :my_app, PgFlow,
   flows: [MyApp.Flows.ProcessOrder],  # add to existing list
   # ...
 ```
@@ -81,7 +81,7 @@ If PgFlow is not yet configured, tell the user to run `/pgflow bootstrap` first.
 ### 5. Compile to Database
 
 ```bash
-mix pgflow.gen.flow MyApp.Flows.ProcessOrder
+mix pgflow.gen.flow_migration MyApp.Flows.ProcessOrder
 mix ecto.migrate
 ```
 
@@ -111,5 +111,5 @@ When generating steps, apply these patterns:
 - Always use `use PgFlow.Flow` and the `@flow` module attribute
 - Queue slugs must be unique across all flows and jobs
 - All handler return values must be JSON-serializable
-- Do not create the migration file manually — use `mix pgflow.gen.flow`
+- Do not create the migration file manually — use `mix pgflow.gen.flow_migration`
 - If the flow has a `map` step, the array source step must return a list

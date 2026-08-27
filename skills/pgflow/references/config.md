@@ -3,7 +3,7 @@
 ## Full Configuration
 
 ```elixir
-config :my_app, MyApp.PgFlow,
+config :my_app, PgFlow,
   # Required
   repo: MyApp.Repo,
 
@@ -69,7 +69,7 @@ Uses PostgreSQL LISTEN/NOTIFY for near-instant wake-ups when messages arrive:
 - Lower latency than polling for bursty workloads
 
 ```elixir
-config :my_app, MyApp.PgFlow,
+config :my_app, PgFlow,
   signal_strategy: :notify,
   notify_fallback_interval: 30_000
 ```
@@ -99,18 +99,16 @@ Each `Worker.Server` is a GenServer that:
 
 ```elixir
 # config/dev.exs
-config :my_app, MyApp.PgFlow,
+config :my_app, PgFlow,
   attach_default_logger: true,
   max_concurrency: 2
 
-# config/test.exs — typically don't start PgFlow in tests
-# Omit PgFlow from supervision tree or use:
-config :my_app, MyApp.PgFlow,
-  flows: [],
-  jobs: []
+# config/test.exs — do not start PgFlow workers (Goodviews pattern).
+# Keep `config :pgflow, repo: MyApp.Repo` so PgFlow.enqueue/2 resolves the repo.
+# Omit `:my_app, PgFlow` entirely so Application.pgflow_children/0 starts nothing.
 
 # config/prod.exs
-config :my_app, MyApp.PgFlow,
+config :my_app, PgFlow,
   signal_strategy: :notify,
   max_concurrency: 20,
   batch_size: 20

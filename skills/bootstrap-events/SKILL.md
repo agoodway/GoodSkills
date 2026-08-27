@@ -9,7 +9,7 @@ Set up a complete event-driven notification system in a Phoenix 1.8 application 
 - Event struct and PubSub-based event bus
 - Database-backed event subscriptions (email, SMS, webhook channels)
 - Listener GenServer for orchestrating delivery
-- Oban workers for email, SMS, webhook, and in-app delivery
+- PgFlow jobs for email, SMS, webhook, and in-app delivery
 - Notification delivery logging
 - Webhook signing (Standard Webhooks spec)
 - LiveView real-time integration
@@ -17,7 +17,7 @@ Set up a complete event-driven notification system in a Phoenix 1.8 application 
 
 **Prerequisites:**
 - Phoenix 1.8+ application with PostgreSQL and binary_id primary keys
-- Oban already configured
+- PgFlow already configured (bootstrap-phoenix Phase 7 / `/pgflow bootstrap`)
 - Swoosh already configured for email
 - An `accounts` table with binary_id primary key
 - A `users` table with `email` and optionally `phone` fields
@@ -30,7 +30,7 @@ Before generating anything, check what's already in place:
 ### 0.1 Detection Steps
 
 1. Check for existing PubSub in `application.ex`
-2. Check for existing Oban configuration
+2. Check for existing PgFlow configuration
 3. Check for existing Swoosh mailer
 4. Check for existing notification/event modules
 5. Identify the app name and module prefix from `mix.exs`
@@ -42,8 +42,8 @@ grep "app:" mix.exs | head -1
 # Check for PubSub
 grep -r "Phoenix.PubSub" lib/*/application.ex
 
-# Check for Oban
-grep -r "Oban" config/config.exs
+# Check for PgFlow
+grep -r "PgFlow" config/ config/*.exs lib/*/application.ex mix.exs
 
 # Check for existing notification modules
 find lib -name "notifications*" -o -name "event*" | head -20
@@ -788,22 +788,38 @@ end
 
 **IMPORTANT:** Replace `MyApp.PubSub` with the actual PubSub module name from the app's `application.ex`.
 
-## Phase 7: Oban Delivery Workers
+## Phase 7: PgFlow Delivery Jobs
 
-### 7.1 Add Oban Queues
+PgFlow has no Oban-style unique jobs. Dedup at the business layer (notification logs / unique indexes). Handler return is a JSON-serializable **map**. Raise to retry; return a map to complete (including invalid destinations).
 
-In `config/config.exs`, add notification queues to the Oban config:
+### 7.1 Register Jobs
+
+Create the job modules first (7.2–7.4), then append them to the existing `:my_app, PgFlow` `jobs:` list (runtime.exs in the Goodviews pattern — omitted in test):
 
 ```elixir
-config :my_app, Oban,
-  # ... existing config ...
-  queues: [
-    # ... existing queues ...
-    notifications_email: 10,
-    notifications_sms: 5,
-    notifications_webhook: 5
-  ]
+if config_env() != :test do
+  config :my_app, PgFlow,
+    repo: MyApp.Repo,
+    jobs: [
+      MyApp.Notifications.Workers.EmailWorker,
+      MyApp.Notifications.Workers.WebhookWorker
+      # MyApp.Notifications.Workers.SmsWorker
+    ],
+    flows: [],
+    max_concurrency: 10,
+    signal_strategy: :notify
+end
 ```
+
+If jobs already exist, append to that list. Then compile each job:
+
+```bash
+mix pgflow.gen.job_migration MyApp.Notifications.Workers.EmailWorker
+mix pgflow.gen.job_migration MyApp.Notifications.Workers.WebhookWorker
+mix ecto.migrate
+```
+
+Rename generated modules to `MyApp.Repo.Migrations.*` if they emit `PgFlow.Repo.Migrations.*`. If PgFlow is not wired yet, follow bootstrap-phoenix Phase 7 / `/pgflow bootstrap` first.
 
 ### 7.2 EmailWorker
 
@@ -812,75 +828,73 @@ config :my_app, Oban,
 ```elixir
 defmodule MyApp.Notifications.Workers.EmailWorker do
   @moduledoc """
-  Oban worker for delivering email notifications.
+  PgFlow job for delivering email notifications.
 
-  Unique on `event_id` + `destination` to prevent duplicate delivery
-  within a 60-second window.
+  Returns a map so the run completes. Raise on mailer failure so PgFlow retries.
   """
 
-  use Oban.Worker,
-    queue: :notifications_email,
-    max_attempts: 5,
-    unique: [keys: [:event_id, :destination], period: 60]
+  use PgFlow.Job
 
   require Logger
   import Swoosh.Email
 
   alias MyApp.Notifications
 
+  @job queue: :notifications_email, max_attempts: 5, timeout: 60
+
   @email_regex ~r/^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-  @impl Oban.Worker
-  @spec perform(Oban.Job.t()) :: :ok | {:cancel, String.t()} | {:error, term()}
-  def perform(%Oban.Job{args: args}) do
-    %{
-      "event_type" => event_type,
-      "event_data" => event_data,
-      "destination" => destination,
-      "account_id" => account_id,
-      "subscription_id" => subscription_id
-    } = args
+  perform do
+    fn args, _ctx ->
+      %{
+        "event_type" => event_type,
+        "event_data" => event_data,
+        "destination" => destination,
+        "account_id" => account_id,
+        "subscription_id" => subscription_id
+      } = args
 
-    resource_type = args["resource_type"]
-    resource_id = args["resource_id"]
+      resource_type = args["resource_type"]
+      resource_id = args["resource_id"]
 
-    if Regex.match?(@email_regex, destination) do
-      # CUSTOMIZE: Build your email content based on event_type
-      email =
-        new()
-        |> to(destination)
-        |> from(mail_from())
-        |> subject("[#{event_type}] Notification")
-        |> text_body("Event: #{event_type}\n\nData: #{inspect(event_data)}")
+      if Regex.match?(@email_regex, destination) do
+        # CUSTOMIZE: Build your email content based on event_type
+        email =
+          new()
+          |> to(destination)
+          |> from(mail_from())
+          |> subject("[#{event_type}] Notification")
+          |> text_body("Event: #{event_type}\n\nData: #{inspect(event_data)}")
 
-      case MyApp.Mailer.deliver(email) do
-        {:ok, _} ->
-          log_result(event_type, account_id, subscription_id, destination, "delivered",
-            resource_type: resource_type,
-            resource_id: resource_id
-          )
+        case MyApp.Mailer.deliver(email) do
+          {:ok, _} ->
+            log_result(event_type, account_id, subscription_id, destination, "delivered",
+              resource_type: resource_type,
+              resource_id: resource_id
+            )
 
-          :ok
+            %{status: "delivered"}
 
-        {:error, reason} ->
-          error_msg = inspect(reason) |> String.slice(0, 500)
+          {:error, reason} ->
+            error_msg = inspect(reason) |> String.slice(0, 500)
 
-          log_result(event_type, account_id, subscription_id, destination, "failed",
-            error: error_msg,
-            resource_type: resource_type,
-            resource_id: resource_id
-          )
+            log_result(event_type, account_id, subscription_id, destination, "failed",
+              error: error_msg,
+              resource_type: resource_type,
+              resource_id: resource_id
+            )
 
-          {:error, reason}
+            raise "email deliver failed: #{error_msg}"
+        end
+      else
+        log_result(event_type, account_id, subscription_id, destination, "failed",
+          error: "invalid email",
+          resource_type: resource_type,
+          resource_id: resource_id
+        )
+
+        %{status: "cancelled", error: "invalid email"}
       end
-    else
-      log_result(event_type, account_id, subscription_id, destination, "failed",
-        error: "invalid email",
-        resource_type: resource_type,
-        resource_id: resource_id
-      )
-
-      {:cancel, "Invalid email destination: #{destination}"}
     end
   end
 
@@ -915,74 +929,75 @@ end
 ```elixir
 defmodule MyApp.Notifications.Workers.WebhookWorker do
   @moduledoc """
-  Oban worker for delivering signed webhook notifications.
+  PgFlow job for delivering signed webhook notifications.
+
+  Returns a map so the run completes. Raise on HTTP failure so PgFlow retries.
   """
 
-  use Oban.Worker,
-    queue: :notifications_webhook,
-    max_attempts: 10,
-    unique: [keys: [:event_id, :destination], period: 60]
+  use PgFlow.Job
 
   require Logger
 
   alias MyApp.Notifications
   alias MyApp.Notifications.{WebhookPayload, WebhookSigner}
 
-  @impl Oban.Worker
-  @spec perform(Oban.Job.t()) :: :ok | {:error, term()}
-  def perform(%Oban.Job{args: args}) do
-    %{
-      "event_id" => event_id,
-      "event_type" => event_type,
-      "event_data" => event_data,
-      "account_id" => account_id,
-      "destination" => destination,
-      "subscription_id" => subscription_id,
-      "secret" => secret
-    } = args
+  @job queue: :notifications_webhook, max_attempts: 10, timeout: 30
 
-    occurred_at = Map.get(args, "occurred_at", DateTime.utc_now() |> DateTime.to_iso8601())
-    resource_type = args["resource_type"]
-    resource_id = args["resource_id"]
+  perform do
+    fn args, _ctx ->
+      %{
+        "event_id" => event_id,
+        "event_type" => event_type,
+        "event_data" => event_data,
+        "account_id" => account_id,
+        "destination" => destination,
+        "subscription_id" => subscription_id,
+        "secret" => secret
+      } = args
 
-    msg_id = "msg_" <> event_id
-    timestamp = DateTime.utc_now() |> DateTime.to_unix() |> Integer.to_string()
-    body = WebhookPayload.build(event_type, event_data, occurred_at)
-    signature = WebhookSigner.sign(secret, msg_id, timestamp, body)
+      occurred_at = Map.get(args, "occurred_at", DateTime.utc_now() |> DateTime.to_iso8601())
+      resource_type = args["resource_type"]
+      resource_id = args["resource_id"]
 
-    headers = [
-      {"content-type", "application/json"},
-      {"webhook-id", msg_id},
-      {"webhook-timestamp", timestamp},
-      {"webhook-signature", signature}
-    ]
+      msg_id = "msg_" <> event_id
+      timestamp = DateTime.utc_now() |> DateTime.to_unix() |> Integer.to_string()
+      body = WebhookPayload.build(event_type, event_data, occurred_at)
+      signature = WebhookSigner.sign(secret, msg_id, timestamp, body)
 
-    case webhook_client().post(destination, headers, body) do
-      {:ok, status} when status in 200..299 ->
-        log_result(event_type, account_id, subscription_id, destination, "delivered",
-          resource_type: resource_type,
-          resource_id: resource_id
-        )
+      headers = [
+        {"content-type", "application/json"},
+        {"webhook-id", msg_id},
+        {"webhook-timestamp", timestamp},
+        {"webhook-signature", signature}
+      ]
 
-        :ok
+      case webhook_client().post(destination, headers, body) do
+        {:ok, status} when status in 200..299 ->
+          log_result(event_type, account_id, subscription_id, destination, "delivered",
+            resource_type: resource_type,
+            resource_id: resource_id
+          )
 
-      {:ok, status} ->
-        log_result(event_type, account_id, subscription_id, destination, "failed",
-          error: "http #{status}",
-          resource_type: resource_type,
-          resource_id: resource_id
-        )
+          %{status: "delivered"}
 
-        {:error, {:http_status, status}}
+        {:ok, status} ->
+          log_result(event_type, account_id, subscription_id, destination, "failed",
+            error: "http #{status}",
+            resource_type: resource_type,
+            resource_id: resource_id
+          )
 
-      {:error, reason} ->
-        log_result(event_type, account_id, subscription_id, destination, "failed",
-          error: inspect(reason),
-          resource_type: resource_type,
-          resource_id: resource_id
-        )
+          raise "webhook http #{status}"
 
-        {:error, reason}
+        {:error, reason} ->
+          log_result(event_type, account_id, subscription_id, destination, "failed",
+            error: inspect(reason),
+            resource_type: resource_type,
+            resource_id: resource_id
+          )
+
+          raise "webhook deliver failed: #{inspect(reason)}"
+      end
     end
   end
 
@@ -1018,53 +1033,52 @@ Only create if the app needs SMS delivery. Similar structure to EmailWorker but 
 ```elixir
 defmodule MyApp.Notifications.Workers.SmsWorker do
   @moduledoc """
-  Oban worker for delivering SMS notifications.
+  PgFlow job for delivering SMS notifications.
   """
 
-  use Oban.Worker,
-    queue: :notifications_sms,
-    max_attempts: 5,
-    unique: [keys: [:event_id, :destination], period: 60]
+  use PgFlow.Job
 
   require Logger
 
   alias MyApp.Notifications
 
+  @job queue: :notifications_sms, max_attempts: 5, timeout: 30
+
   @phone_regex ~r/^\+[1-9]\d{1,14}$/
 
-  @impl Oban.Worker
-  @spec perform(Oban.Job.t()) :: :ok | {:cancel, String.t()} | {:error, term()}
-  def perform(%Oban.Job{args: args}) do
-    %{
-      "event_type" => event_type,
-      "event_data" => _event_data,
-      "destination" => destination,
-      "account_id" => account_id,
-      "subscription_id" => subscription_id
-    } = args
+  perform do
+    fn args, _ctx ->
+      %{
+        "event_type" => event_type,
+        "event_data" => _event_data,
+        "destination" => destination,
+        "account_id" => account_id,
+        "subscription_id" => subscription_id
+      } = args
 
-    resource_type = args["resource_type"]
-    resource_id = args["resource_id"]
+      resource_type = args["resource_type"]
+      resource_id = args["resource_id"]
 
-    if Regex.match?(@phone_regex, destination) do
-      # CUSTOMIZE: Build SMS text and send via your provider
-      # text = build_message(event_type, event_data)
-      # case YourSmsProvider.send(destination, text) do ...
+      if Regex.match?(@phone_regex, destination) do
+        # CUSTOMIZE: Build SMS text and send via your provider
+        # text = build_message(event_type, event_data)
+        # case YourSmsProvider.send(destination, text) do ...
 
-      log_result(event_type, account_id, subscription_id, destination, "delivered",
-        resource_type: resource_type,
-        resource_id: resource_id
-      )
+        log_result(event_type, account_id, subscription_id, destination, "delivered",
+          resource_type: resource_type,
+          resource_id: resource_id
+        )
 
-      :ok
-    else
-      log_result(event_type, account_id, subscription_id, destination, "failed",
-        error: "invalid phone",
-        resource_type: resource_type,
-        resource_id: resource_id
-      )
+        %{status: "delivered"}
+      else
+        log_result(event_type, account_id, subscription_id, destination, "failed",
+          error: "invalid phone",
+          resource_type: resource_type,
+          resource_id: resource_id
+        )
 
-      {:cancel, "Invalid phone destination: #{destination}"}
+        %{status: "cancelled", error: "invalid phone"}
+      end
     end
   end
 
@@ -1088,7 +1102,7 @@ end
 
 ## Phase 8: Listener GenServer
 
-Create `lib/<app>/notifications/listener.ex` — the orchestrator that bridges PubSub events to Oban delivery jobs.
+Create `lib/<app>/notifications/listener.ex` — the orchestrator that bridges PubSub events to PgFlow delivery jobs.
 
 ### Key Design Decisions
 
@@ -1101,7 +1115,7 @@ Create `lib/<app>/notifications/listener.ex` — the orchestrator that bridges P
 defmodule MyApp.Notifications.Listener do
   @moduledoc """
   GenServer that subscribes to the global notifications PubSub topic
-  and orchestrates delivery by enqueuing Oban workers for each
+  and orchestrates delivery by enqueuing PgFlow jobs for each
   matching subscription.
   """
 
@@ -1157,28 +1171,28 @@ defmodule MyApp.Notifications.Listener do
     {resource_type, resource_id} = resource_for_event(event)
 
     job_args = %{
-      event_id: event.event_id,
-      event_type: Atom.to_string(event.type),
-      event_data: event.data,
-      account_id: event.account_id,
-      destination: subscription.destination,
-      subscription_id: subscription.id,
-      occurred_at: DateTime.to_iso8601(event.occurred_at),
-      resource_type: resource_type,
-      resource_id: resource_id,
-      secret: subscription.secret
+      "event_id" => event.event_id,
+      "event_type" => Atom.to_string(event.type),
+      "event_data" => event.data,
+      "account_id" => event.account_id,
+      "destination" => subscription.destination,
+      "subscription_id" => subscription.id,
+      "occurred_at" => DateTime.to_iso8601(event.occurred_at),
+      "resource_type" => resource_type,
+      "resource_id" => resource_id,
+      "secret" => subscription.secret
     }
 
     result =
       case subscription.channel do
-        "email" -> EmailWorker.new(job_args) |> Oban.insert()
-        # "sms" -> SmsWorker.new(job_args) |> Oban.insert()
-        "webhook" -> WebhookWorker.new(job_args) |> Oban.insert()
+        "email" -> PgFlow.enqueue(EmailWorker, job_args)
+        # "sms" -> PgFlow.enqueue(SmsWorker, job_args)
+        "webhook" -> PgFlow.enqueue(WebhookWorker, job_args)
         other -> {:error, "Unknown channel: #{other}"}
       end
 
     case result do
-      {:ok, _job} -> :ok
+      {:ok, _run_id} -> :ok
       {:error, reason} ->
         Logger.error("Failed to enqueue #{subscription.channel} delivery",
           event_id: event.event_id,
@@ -1351,7 +1365,7 @@ Notifications.emit(Event.new(...))
 
 1. **Fire-and-forget** — Event emission never blocks business operations
 2. **Multi-tenant isolation** — Account-scoped topics and queries
-3. **Idempotent delivery** — Oban unique constraints prevent duplicates within 60s
+3. **Idempotent delivery** — PgFlow has no unique-job keys; `local_broadcast` plus append-only logs. Dedup at the business layer if a second enqueue is possible
 4. **Cluster-safe** — `local_broadcast` for Listener prevents duplicate processing
 5. **Testable** — Listener not started in test; call `handle_info/2` directly
-6. **Extensible** — Add new event types, channels, or workers without changing core architecture
+6. **Extensible** — Add new event types, channels, or PgFlow jobs without changing core architecture

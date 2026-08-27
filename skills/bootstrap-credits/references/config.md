@@ -57,14 +57,33 @@ In `mix.exs`:
 {:stripity_stripe, "~> 3.2"}
 ```
 
-Oban should already be configured. If not, add:
+PgFlow should already be configured (bootstrap-phoenix Phase 7 / `/pgflow bootstrap`). If not, add:
 ```elixir
-{:oban, "~> 2.18"}
+{:pgflow, github: "agoodway/pgflow", branch: "main"}
 ```
 
-And in `config/config.exs`:
+And follow the Goodviews wiring:
+
 ```elixir
-config :my_app, Oban,
-  repo: MyApp.Repo,
-  queues: [default: 10]
+# config/config.exs — enqueue without a running supervisor (tests)
+config :pgflow, repo: MyApp.Repo
+
+# config/runtime.exs — omit in test so workers do not start
+if config_env() != :test do
+  config :my_app, PgFlow,
+    repo: MyApp.Repo,
+    jobs: [MyApp.Billing.CreditPurchaseWorker],
+    flows: [],
+    max_concurrency: 10,
+    signal_strategy: :notify
+end
 ```
+
+If PgFlow is already configured, append `MyApp.Billing.CreditPurchaseWorker` to the existing `jobs:` list. Then compile the job:
+
+```bash
+mix pgflow.gen.job_migration MyApp.Billing.CreditPurchaseWorker
+mix ecto.migrate
+```
+
+Rename the generated migration module to `MyApp.Repo.Migrations.*` if it emits `PgFlow.Repo.Migrations.*`.

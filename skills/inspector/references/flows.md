@@ -25,7 +25,7 @@ Read everything in a single parallel batch:
 **Surrounding context** (parallel with above):
 - **Canonical specs**: for each capability the change touches, read `openspec/specs/<capability>/spec.md` to understand pre-change behavior.
 - **Existing code**: use Grep/Glob to find related modules, contexts, workers, controllers, LiveViews. Read enough to understand current process flows.
-- **Supervision trees / Oban workers / GenServers**: search for background processing that the change introduces or modifies.
+- **Supervision trees / PgFlow jobs / GenServers**: search for background processing that the change introduces or modifies.
 
 ### 2. Identify all flows
 
@@ -34,7 +34,7 @@ From the artifacts, enumerate every distinct process the change introduces or mo
 - **User flows** — step-by-step user journeys (e.g., signup, purchase, onboarding)
 - **Data flows** — how data moves through the system (e.g., ingest → validate → transform → store)
 - **Request/response cycles** — HTTP or WebSocket interactions (e.g., API call → auth → context → response)
-- **Background processes** — async jobs, scheduled tasks, event handlers (e.g., Oban worker pipeline)
+- **Background processes** — async jobs, scheduled tasks, event handlers (e.g., PgFlow job pipeline)
 - **State machines** — entities with lifecycle states (e.g., draft → published → archived)
 - **Event chains** — telemetry events, PubSub broadcasts, webhook cascades
 - **Error/retry flows** — what happens on failure, retry logic, dead letter handling
@@ -57,7 +57,7 @@ Write `openspec/changes/<change-id>/inspector-flows.md` with this structure:
 | 1 | User creates a project | User flow | Happy path + validation errors |
 | 2 | Webhook delivery pipeline | Data flow | Ingest → queue → deliver → retry |
 | 3 | Project lifecycle | State machine | draft → active → archived |
-| 4 | Nightly usage aggregation | Background | Oban cron worker |
+| 4 | Nightly usage aggregation | Background | PgFlow cron job |
 | ... | ... | ... | ... |
 
 ## Flows
@@ -107,7 +107,7 @@ Type: **Data flow**
 ```
 ┌──────────┐     ┌───────────┐     ┌───────────┐     ┌──────────┐
 │ Ingest   │────▶│ Validate  │────▶│ Enqueue   │────▶│ Deliver  │
-│ endpoint │     │ payload   │     │ Oban job  │     │ webhook  │
+│ endpoint │     │ payload   │     │ PgFlow job│     │ webhook  │
 └──────────┘     └─────┬─────┘     └───────────┘     └────┬─────┘
                        │                                   │
                        ▼                                   ▼
@@ -126,7 +126,7 @@ Type: **Data flow**
 **Steps:**
 1. External system sends payload to ingest endpoint
 2. Validate schema and auth — reject with 422 if invalid
-3. Enqueue Oban job for async delivery
+3. Enqueue PgFlow job for async delivery
 4. Worker delivers webhook to target URL
 5. On failure, retry with exponential backoff (max 5 attempts)
 6. After max retries, move to dead letter for manual review

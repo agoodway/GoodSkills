@@ -11,12 +11,12 @@ Verify before starting:
 
 ## Phase 1: Add Dependency
 
-Add PgFlow to `mix.exs`:
+Add PgFlow to `mix.exs` (GitHub `main`, matching Goodviews):
 
 ```elixir
 defp deps do
   [
-    {:pgflow, "~> 0.1.0"}
+    {:pgflow, github: "agoodway/pgflow", branch: "main"}
   ]
 end
 ```
@@ -27,69 +27,72 @@ mix deps.get
 
 ## Phase 2: Database Setup
 
-### 2.1 Copy Core Migrations
+Generate consumer migrations. Each writes one wrapper into `priv/repo/migrations/`:
 
 ```bash
-mix pgflow.copy_migrations
-```
+# 1. citext, pg_trgm, pgcrypto, pg_cron (`--no-cron` if pg_cron isn't available)
+mix pgflow.gen.postgres_extensions_migration
 
-This copies the pgflow schema migrations that create:
-- `pgflow` schema with flows, steps, runs, step_states, step_tasks tables
-- PGMQ extension and queue infrastructure
-- SQL functions for flow orchestration
+# 2. pgmq via SQL (skip on hosts that already ship pgmq, e.g. Supabase)
+mix pgflow.gen.pgmq_migration
 
-### 2.2 Generate Worker Extensions
+# 3. pgflow schema + Elixir helpers. No `--dashboard` unless requested.
+mix pgflow.setup
 
-```bash
-mix pgflow.gen.extensions_migration
-```
-
-This adds Elixir-specific worker tracking tables and functions.
-
-### 2.3 Run Migrations
-
-```bash
 mix ecto.migrate
-```
-
-### 2.4 Verify Schema
-
-```bash
 mix pgflow.check_schema
 ```
 
+Then edit generated migrations (Goodviews pattern):
+
+- Rename modules to `MyApp.Repo.Migrations.*` if the generator emits `PgFlow.Repo.Migrations.*`
+- Keep `@disable_ddl_transaction true` / `@disable_migration_lock true` on the extensions migration
+- Wrap `CREATE EXTENSION pg_cron` and later `cron.schedule` / `cron.unschedule` so they run only when `current_setting('cron.database_name', true) IS NOT DISTINCT FROM current_database()`
+- citext uses `IF NOT EXISTS`; do not drop citext on down if auth tables already own it
+
 ## Phase 3: Configuration
 
-Add PgFlow configuration to `config/config.exs`:
+**File:** `config/config.exs` — repo for enqueue without a running supervisor (tests):
 
 ```elixir
-config :my_app, MyApp.PgFlow,
-  repo: MyApp.Repo,
-  flows: [],
-  jobs: [],
-  signal_strategy: :polling,
-  max_concurrency: 10,
-  batch_size: 10,
-  pubsub: MyApp.PubSub,
-  attach_default_logger: true
+config :pgflow, repo: MyApp.Repo
 ```
 
-See [config.md](config.md) for all configuration options and signal strategies.
+**File:** `config/runtime.exs` — omit in test so Application does not start workers:
+
+```elixir
+if config_env() != :test do
+  config :my_app, PgFlow,
+    repo: MyApp.Repo,
+    flows: [],
+    jobs: [],
+    signal_strategy: :notify,
+    max_concurrency: 10
+end
+```
+
+Do **not** set `:pubsub` unless adding LiveClient / dashboard. See [config.md](config.md) for all options.
 
 ## Phase 4: Supervision Tree
 
-Add PgFlow to the application supervision tree in `lib/my_app/application.ex`:
+Add a config-gated child in `lib/my_app/application.ex`. Do **not** call `Mix.env/0`. Tests omit `:my_app, PgFlow`, so this starts nothing there:
 
 ```elixir
-def start(_type, _args) do
-  children = [
+children =
+  [
     MyApp.Repo,
-    MyAppWeb.Endpoint,
-    {PgFlow, Application.fetch_env!(:my_app, MyApp.PgFlow)}
-  ]
+    {Phoenix.PubSub, name: MyApp.PubSub}
+  ] ++
+    pgflow_children() ++
+    [
+      MyAppWeb.Endpoint
+    ]
 
-  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
-  Supervisor.start_link(children, opts)
+defp pgflow_children do
+  case Application.get_env(:my_app, PgFlow) do
+    opts when is_list(opts) -> [{PgFlow, opts}]
+    _other -> []
+  end
 end
 ```
 
@@ -132,7 +135,7 @@ end
 Add the module to the `flows` list in config:
 
 ```elixir
-config :my_app, MyApp.PgFlow,
+config :my_app, PgFlow,
   repo: MyApp.Repo,
   flows: [MyApp.Flows.ExampleFlow],
   # ...
@@ -141,7 +144,7 @@ config :my_app, MyApp.PgFlow,
 ### 5.3 Compile to Database
 
 ```bash
-mix pgflow.gen.flow MyApp.Flows.ExampleFlow
+mix pgflow.gen.flow_migration MyApp.Flows.ExampleFlow
 mix ecto.migrate
 ```
 
@@ -175,13 +178,13 @@ Register, compile, and enqueue:
 
 ```elixir
 # Add to config
-config :my_app, MyApp.PgFlow,
+config :my_app, PgFlow,
   jobs: [MyApp.Jobs.ExampleJob],
   # ...
 ```
 
 ```bash
-mix pgflow.gen.job MyApp.Jobs.ExampleJob
+mix pgflow.gen.job_migration MyApp.Jobs.ExampleJob
 mix ecto.migrate
 ```
 
@@ -238,12 +241,11 @@ end
 
 ## Verification Checklist
 
-- [ ] PgFlow dependency added and fetched
-- [ ] Core migrations copied and run
-- [ ] Worker extensions migration generated and run
+- [ ] PgFlow dependency added (`github: "agoodway/pgflow"`) and fetched
+- [ ] Extensions + pgmq + `mix pgflow.setup` migrations generated, modules renamed, cron guarded, migrated
 - [ ] Schema verified with `mix pgflow.check_schema`
-- [ ] Configuration added to `config.exs`
-- [ ] PgFlow added to supervision tree
+- [ ] `config :pgflow, repo:` plus non-test `:my_app, PgFlow` config
+- [ ] Config-gated `{PgFlow, opts}` child in the supervision tree (no workers in test)
 - [ ] At least one flow or job defined
-- [ ] Flow/job compiled to database
+- [ ] Flow/job compiled to database (`gen.flow_migration` / `gen.job_migration`)
 - [ ] Flow starts and completes successfully

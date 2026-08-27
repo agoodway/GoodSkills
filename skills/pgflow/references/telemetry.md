@@ -82,7 +82,7 @@ end
 Enable the built-in structured logger:
 
 ```elixir
-config :my_app, MyApp.PgFlow,
+config :my_app, PgFlow,
   attach_default_logger: true
 ```
 

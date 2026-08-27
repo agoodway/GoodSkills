@@ -109,7 +109,7 @@ defmodule MyAppWeb.StripeWebhookController do
          data: %{object: %Stripe.PaymentIntent{} = payment_intent}
        }) do
     with {:ok, args} <- build_job_args(payment_intent),
-         {:ok, _job} <- enqueue_credit_job(args) do
+         {:ok, _run_id} <- enqueue_credit_job(args) do
       :ok
     else
       {:error, {:invalid_metadata, _payment_intent_id, _metadata}} = error ->
@@ -144,9 +144,9 @@ defmodule MyAppWeb.StripeWebhookController do
     do: {:error, {:invalid_metadata, payment_intent_id, metadata}}
 
   defp enqueue_credit_job(args) do
-    args
-    |> CreditPurchaseWorker.new()
-    |> Oban.insert()
+    PgFlow.enqueue(CreditPurchaseWorker, args)
+  rescue
+    error -> {:error, error}
   end
 
   defp valid_metadata_value?(value), do: is_binary(value) and value != ""

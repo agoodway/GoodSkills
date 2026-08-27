@@ -141,7 +141,7 @@ Automatic cleanup happens on LiveView unmount.
 LiveClient requires `pubsub` in the PgFlow config:
 
 ```elixir
-config :my_app, MyApp.PgFlow,
+config :my_app, PgFlow,
   pubsub: MyApp.PubSub,
   # ...
 ```

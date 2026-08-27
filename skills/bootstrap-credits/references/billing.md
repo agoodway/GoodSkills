@@ -150,38 +150,45 @@ end
 defmodule MyApp.Billing.CreditPurchaseWorker do
   @moduledoc """
   Processes successful Stripe PaymentIntents and adds credits idempotently.
+
+  Handler returns a JSON-serializable map so the PgFlow run completes.
+  Raise on transient failure so PgFlow retries (`max_attempts: 20`).
+  Duplicate payment-intent inserts complete as `%{status: "duplicate"}`.
   """
-  use Oban.Worker, queue: :default, max_attempts: 20
+  use PgFlow.Job
 
   alias MyApp.Billing
   alias MyApp.Credits
 
-  @impl Oban.Worker
-  @spec perform(Oban.Job.t()) :: :ok | {:error, term()}
-  def perform(%Oban.Job{
-        args: %{
-          "payment_intent_id" => payment_intent_id,
-          "account_id" => account_id,
-          "pack_key" => pack_key
-        }
-      }) do
-    credit_account(account_id, payment_intent_id, pack_key)
+  @job queue: :credit_purchase, max_attempts: 20, timeout: 60
+
+  perform do
+    fn input, _ctx ->
+      credit_account(input["account_id"], input["payment_intent_id"], input["pack_key"])
+    end
   end
 
-  def perform(%Oban.Job{}), do: {:error, :invalid_args}
-
-  defp credit_account(account_id, payment_intent_id, pack_key) do
+  defp credit_account(account_id, payment_intent_id, pack_key)
+       when is_binary(account_id) and is_binary(payment_intent_id) and is_binary(pack_key) do
     with {:ok, pack} <- Billing.get_pack(pack_key),
          {:ok, _result} <-
            Credits.add(account_id, pack.credits, credit_add_opts(pack, payment_intent_id)) do
-      :ok
+      %{status: "credited"}
     else
       {:error, %Ecto.Changeset{} = changeset} ->
-        if duplicate_purchase_error?(changeset), do: :ok, else: {:error, changeset}
+        if duplicate_purchase_error?(changeset) do
+          %{status: "duplicate"}
+        else
+          raise "credit add failed: #{inspect(changeset.errors)}"
+        end
 
       {:error, reason} ->
-        {:error, reason}
+        raise "credit add failed: #{inspect(reason)}"
     end
+  end
+
+  defp credit_account(_account_id, _payment_intent_id, _pack_key) do
+    %{status: "invalid_args"}
   end
 
   defp credit_add_opts(pack, payment_intent_id) do
@@ -208,4 +215,4 @@ defmodule MyApp.Billing.CreditPurchaseWorker do
 end
 ```
 
-**Key**: The worker uses `max_attempts: 20` for resilience and detects the unique constraint violation to handle duplicate webhook deliveries gracefully (returns `:ok` instead of erroring).
+**Key**: The job uses `max_attempts: 20` for resilience. Duplicate webhook deliveries hit the unique index and return `%{status: "duplicate"}` so the run completes instead of retrying. Tests call `CreditPurchaseWorker.perform(input, ctx)` and assert enqueue via `pgflow.runs` (`flow_slug` `credit_purchase`).

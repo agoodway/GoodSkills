@@ -56,7 +56,7 @@ The handler receives:
 ## Compiling Jobs
 
 ```bash
-mix pgflow.gen.job MyApp.Jobs.SendEmail
+mix pgflow.gen.job_migration MyApp.Jobs.SendEmail
 mix ecto.migrate
 ```
 
@@ -88,7 +88,7 @@ mix ecto.migrate
 Register jobs in config:
 
 ```elixir
-config :my_app, MyApp.PgFlow,
+config :my_app, PgFlow,
   repo: MyApp.Repo,
   jobs: [MyApp.Jobs.SendEmail, MyApp.Jobs.DailyReport],
   # ...

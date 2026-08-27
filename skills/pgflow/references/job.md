@@ -55,7 +55,7 @@ Rules for generating the module:
 Read `config/config.exs` and add the new module to the `jobs:` list:
 
 ```elixir
-config :my_app, MyApp.PgFlow,
+config :my_app, PgFlow,
   jobs: [MyApp.Jobs.SendEmail],  # add to existing list
   # ...
 ```
@@ -65,7 +65,7 @@ If PgFlow is not yet configured, tell the user to run `/pgflow bootstrap` first.
 ### 5. Compile to Database
 
 ```bash
-mix pgflow.gen.job MyApp.Jobs.SendEmail
+mix pgflow.gen.job_migration MyApp.Jobs.SendEmail
 mix ecto.migrate
 ```
 
@@ -97,5 +97,5 @@ Print how to enqueue the job:
 - Always use `use PgFlow.Job` and the `@job` module attribute
 - Queue slugs must be unique across all flows and jobs
 - All handler return values must be JSON-serializable
-- Do not create the migration file manually — use `mix pgflow.gen.job`
+- Do not create the migration file manually — use `mix pgflow.gen.job_migration`
 - For jobs that call external APIs, set appropriate timeouts and retry limits

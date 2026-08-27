@@ -9,7 +9,7 @@ Set up a new Phoenix application with comprehensive code quality, testing, and d
 - Phoenix 1.8+ with LiveView
 - PostgreSQL with binary_id
 - Credo, ExDNA, ExSlop, Doctor, Dialyxir, and Sobelow for code quality
-- Oban for background jobs
+- PgFlow for background jobs and workflows (https://github.com/agoodway/pgflow)
 - Req for HTTP (never HTTPoison/Tesla)
 - Tidewave for AI agent integration
 - Dotenvy for environment management
@@ -103,8 +103,8 @@ defp deps do
     # Email
     {:swoosh, "~> 1.16"},
 
-    # Background Jobs
-    {:oban, "~> 2.18"},
+    # Background Jobs — PgFlow (not Oban)
+    {:pgflow, github: "agoodway/pgflow", branch: "main"},
 
     # Security
     {:bcrypt_elixir, "~> 3.0"},
@@ -623,9 +623,108 @@ In the `live_view/0` macro, add `on_mount Sentry.LiveViewHook` inside the quote 
   end
 ```
 
-## Phase 7: Finalize Setup
+## Phase 7: PgFlow Background Jobs
 
-### 6.1 Update .gitignore
+Use [PgFlow](https://github.com/agoodway/pgflow) for background jobs and DAG workflows. Do not add Oban. Pattern matches the Goodviews Phoenix setup: enqueue without workers in test, start `{PgFlow, opts}` only when config is present.
+
+### 7.1 Repo config (all environments)
+
+**File:** `config/config.exs`
+
+```elixir
+# Repo for enqueue without a running PgFlow supervisor (tests).
+config :pgflow, repo: APP_NAME.Repo
+```
+
+### 7.2 Supervisor config (non-test only)
+
+**File:** `config/runtime.exs`
+
+Add after the Dotenvy / Sentry blocks. Omit this in test so `Application` does not start workers:
+
+```elixir
+# Single source for non-test boots (dev + prod + releases). Omitted in test
+# so APP_NAME.Application does not start PgFlow workers.
+if config_env() != :test do
+  config :APP_NAME, PgFlow,
+    repo: APP_NAME.Repo,
+    jobs: [],
+    flows: [],
+    max_concurrency: 10,
+    signal_strategy: :notify
+end
+```
+
+Do **not** set `:pubsub` unless you are adding LiveClient / dashboard. Do **not** call `Mix.env/0`.
+
+### 7.3 Supervision tree
+
+**File:** `lib/APP_NAME/application.ex`
+
+Insert `pgflow_children()` into the existing children list (do not drop other children). Start PgFlow only when `Application.get_env(:APP_NAME, PgFlow)` is a keyword list:
+
+```elixir
+children =
+  [
+    APP_NAMEWeb.Telemetry,
+    APP_NAME.Repo,
+    {Phoenix.PubSub, name: APP_NAME.PubSub}
+  ] ++
+    pgflow_children() ++
+    [
+      {DNSCluster, query: Application.get_env(:APP_NAME, :dns_cluster_query) || :ignore},
+      APP_NAMEWeb.Endpoint
+    ]
+
+defp pgflow_children do
+  case Application.get_env(:APP_NAME, PgFlow) do
+    opts when is_list(opts) -> [{PgFlow, opts}]
+    _other -> []
+  end
+end
+```
+
+### 7.4 Database migrations
+
+After `mix deps.get`:
+
+```bash
+mix pgflow.gen.postgres_extensions_migration
+mix pgflow.gen.pgmq_migration
+mix pgflow.setup
+mix ecto.migrate
+```
+
+Then edit generated migrations:
+
+- Rename modules to `APP_NAME.Repo.Migrations.*` if the generator emits `PgFlow.Repo.Migrations.*`
+- Keep `@disable_ddl_transaction true` and `@disable_migration_lock true` on the extensions migration
+- Wrap `CREATE EXTENSION pg_cron` (and later `cron.schedule` / `cron.unschedule`) so they run only when `current_setting('cron.database_name', true) IS NOT DISTINCT FROM current_database()` — worktree and test DBs still migrate
+- Do **not** pass `--dashboard` to `mix pgflow.setup`
+- On hosts without pg_cron, regenerate extensions with `mix pgflow.gen.postgres_extensions_migration --no-cron`
+- On hosts that already ship pgmq (e.g. Supabase), skip `mix pgflow.gen.pgmq_migration` and `CREATE EXTENSION IF NOT EXISTS pgmq` instead
+
+Later jobs/flows:
+
+```bash
+mix pgflow.gen.job_migration APP_NAME.Jobs.ExampleJob
+mix pgflow.gen.flow_migration APP_NAME.Flows.ExampleFlow
+mix ecto.migrate
+```
+
+Register each module in the `jobs:` / `flows:` lists in the `:APP_NAME, PgFlow` config.
+
+### 7.5 Tests
+
+- Do **not** start PgFlow workers in test (omit `:APP_NAME, PgFlow` in `config/test.exs`)
+- Call `JobModule.perform(input, ctx)` (or `nil` if unused). `PgFlow.Context.new/1` needs `run_id`, `step_slug`, `task_index`, `attempt`, `repo`
+- Assert enqueue by querying `pgflow.runs` (`flow_slug` + `input`), not an Oban helper
+- Handler return is a JSON-serializable **map**, not `:ok`. Raise to retry; return a map to complete (including no-ops and permanent failures)
+- Timeout is seconds on `@job`, read via `JobModule.__pgflow_definition__().opts[:timeout]`
+
+## Phase 8: Finalize Setup
+
+### 8.1 Update .gitignore
 
 **File:** `.gitignore`
 
@@ -648,7 +747,7 @@ Add these lines:
 .vscode/
 ```
 
-### 6.2 Create Dialyzer PLT Directory
+### 8.2 Create Dialyzer PLT Directory
 
 ```bash
 mkdir -p priv/plts
@@ -681,7 +780,8 @@ mix check
 After running this command, you should have:
 
 - [ ] Phoenix project with binary_id and PostgreSQL
-- [ ] All dependencies installed (Credo, ExDNA, ExSlop, Doctor, Dialyxir, Sobelow, Oban, Req, Sentry, Tidewave)
+- [ ] All dependencies installed (Credo, ExDNA, ExSlop, Doctor, Dialyxir, Sobelow, PgFlow, Req, Sentry, Tidewave)
+- [ ] PgFlow wired (dep from GitHub `agoodway/pgflow`, `config :pgflow, repo:`, non-test `{PgFlow, opts}` child, schema migrations, no workers in test)
 - [ ] Credo configuration (.credo.exs)
 - [ ] Sobelow configuration (.sobelow-conf)
 - [ ] Doctor configuration (.doctor.exs)
@@ -704,6 +804,9 @@ Search and replace `APP_NAME` in these files:
 - `mix.exs` (multiple locations)
 - `.doctor.exs` (module ignore patterns)
 - `lib/APP_NAME_web/endpoint.ex` (Tidewave plug)
+- `lib/APP_NAME/application.ex` (PgFlow child)
+- `config/config.exs` (`config :pgflow, repo:`)
+- `config/runtime.exs` (`:APP_NAME, PgFlow`)
 - `.env.sample`
 - `.env.dev`
 - `.env.test`
@@ -737,6 +840,7 @@ mix ecto.reset              # Drop and recreate DB
 
 ## Important Notes
 
+- **Background jobs**: Always use PgFlow (`github: "agoodway/pgflow"`), never Oban
 - **HTTP Client**: Always use `Req`, never `HTTPoison`, `Tesla`, or `:httpc`
 - **Tailwind CSS v4**: Uses new import syntax - all vendor deps must be imported into `app.js` or `app.css`
 - **Never write inline `<script>` tags** in templates

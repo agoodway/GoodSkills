@@ -14,7 +14,7 @@ grep: allow
 ## Triggers
 - Elixir or Phoenix backend files are changed
 - Phoenix contexts, controllers, LiveViews, channels, or components need review
-- GenServer, supervision tree, Oban, or OTP behavior changes need analysis
+- GenServer, supervision tree, PgFlow, or OTP behavior changes need analysis
 - Ecto schema, query, changeset, migration, or transaction changes need review
 
 ## Behavioral Mindset
