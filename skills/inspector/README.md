@@ -27,9 +27,21 @@ npx skills add agoodway/GoodSkills --skill inspector
 | Subcommand | Purpose |
 |------------|---------|
 | `review` | Audit an OpenSpec change for gaps, correctness, consistency, and codebase alignment |
-| `review-update` | Quick review then auto-patch fixable findings |
+| `review-update` | Quick review then auto-patch; dispatches to standalone skill `inspector-review-update` (`--ask` or `--auto`) |
 | `sync-linear` | Sync an OpenSpec change to a Linear issue (create or update) |
 | `commits` | Detect recent commits that require OpenSpec spec/change updates |
 | `reconcile` | Update a change's artifacts to match the current codebase state |
 | `explain` | Explain a change with prose, ASCII diagrams, and ASCII mockups |
 | `review-work` | Verify implementation, run code review, and fix all findings |
+
+`review-update` also has a first-class entry point:
+
+```
+/inspector-review-update [change-id] [--ask | --auto]
+```
+
+Install the standalone skill if needed:
+
+```bash
+npx skills add agoodway/GoodSkills --skill inspector-review-update -g
+```

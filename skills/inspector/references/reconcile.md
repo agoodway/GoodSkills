@@ -2,7 +2,7 @@
 
 Reconcile an OpenSpec change's artifacts against the **current codebase state**. Detects where the codebase has moved beyond, diverged from, or already implemented what the change describes — then patches the change artifacts to match reality.
 
-Unlike `review` (read-only audit) or `review-update` (fixes spec-internal issues), `reconcile` focuses on **codebase → spec drift**: things the code does that the specs don't reflect, things the specs claim that the code contradicts, and tasks that are already done but unchecked.
+Unlike `review` (read-only audit) or `inspector-review-update` / `review-update` (fixes spec-internal issues), `reconcile` focuses on **codebase → spec drift**: things the code does that the specs don't reflect, things the specs claim that the code contradicts, and tasks that are already done but unchecked.
 
 ## Inputs
 

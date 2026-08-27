@@ -13,6 +13,8 @@ description: >
   "/inspector review-work", "verify and review",
   or asks to sanity-check, critique, find gaps, generate UI mockups,
   process flow diagrams, or verify implementation.
+  Note: review-update is implemented by the standalone skill inspector-review-update
+  (supports --ask / --auto question modes); this skill dispatches to it.
 ---
 
 # Inspector
@@ -37,7 +39,7 @@ Prefer direct Glob/Grep/Read over broad shell scans when the runtime provides th
 | Subcommand | Purpose | Reference |
 |------------|---------|-----------|
 | `review`   | Audit an OpenSpec change for gaps, correctness, consistency, and codebase alignment | [references/review.md](references/review.md) |
-| `review-update` | Quick review then auto-patch fixable findings, ask user about the rest | [references/review-update.md](references/review-update.md) |
+| `review-update` | Quick review then auto-patch; design questions via ask or auto mode | **Standalone skill** `inspector-review-update` (see Dispatch) |
 | `sync-linear` | Sync an OpenSpec change to a Linear issue (create or update) | [references/sync-linear.md](references/sync-linear.md) |
 | `commits` | Detect recent commits that require OpenSpec spec/change updates | [references/commits.md](references/commits.md) |
 | `reconcile` | Update a change's artifacts to match the current codebase state | [references/reconcile.md](references/reconcile.md) |
@@ -54,7 +56,8 @@ Display a list of all available subcommands. Output the following exactly:
 /inspector subcommands:
 
   review [change-id]        — Audit a change for gaps, correctness, consistency, and codebase alignment
-  review-update [change-id] — Quick review then auto-patch fixable findings
+  review-update [change-id] [--ask|--auto]
+                            — Quick review then auto-patch (standalone: /inspector-review-update)
   sync-linear [change-id]   — Sync a change to a Linear issue (create or update)
   commits                   — Detect recent commits that require spec/change updates
   reconcile [change-id]     — Update a change's artifacts to match the current codebase
@@ -72,14 +75,21 @@ More subcommands will be added over time. If `/inspector` is invoked without a s
 1. Parse the subcommand and args from the user's invocation. Examples:
    - `/inspector review` → subcommand `review`, no args
    - `/inspector review buyer-outbound-frequency-caps` → subcommand `review`, arg `buyer-outbound-frequency-caps`
+   - `/inspector review-update my-change --auto` → subcommand `review-update`
 2. If the subcommand is unknown, list available subcommands from the table above and stop.
-3. Read the matching reference file from `references/` and follow its workflow exactly.
-4. Pass any remaining arguments through to the subcommand.
+3. **Special case — `review-update`**: this workflow lives in the standalone skill **`inspector-review-update`**.
+   - Load and follow that skill's `SKILL.md` (project or global skills install).
+   - Pass through change-id and mode flags (`--ask` / `--auto` or natural-language mode).
+   - If the standalone skill is not installed, stop and tell the user to install it, e.g.:
+     `npx skills add agoodway/GoodSkills --skill inspector-review-update -g`
+   - Do **not** use the legacy local copy at [references/review-update.md](references/review-update.md) except as a last-resort fallback when the standalone skill cannot be loaded.
+4. For every other subcommand: read the matching reference file from `references/` and follow its workflow exactly.
+5. Pass any remaining arguments through to the subcommand.
 
 ## Conventions shared across subcommands
 
 - **OpenSpec layout**: changes live in `openspec/changes/<change-id>/` with `proposal.md`, `tasks.md`, optional `design.md`, and delta specs at `specs/<capability>/spec.md`. Canonical specs live in `openspec/specs/<capability>/spec.md`.
-- **Read-only on OpenSpec files**: never modify proposals, deltas, or tasks during inspection. Inspector only writes its own report artifacts. Exceptions: `review-update` and `reconcile` explicitly modify change artifacts as part of their workflow. `review-work` modifies codebase files (not OpenSpec files) to fix review findings. `explain`, `mockups`, and `flows` append a reference link to `design.md` (or `proposal.md` if no `design.md` exists) pointing to their generated artifact.
+- **Read-only on OpenSpec files**: never modify proposals, deltas, or tasks during inspection. Inspector only writes its own report artifacts. Exceptions: `review-update` (via standalone `inspector-review-update`) and `reconcile` explicitly modify change artifacts as part of their workflow. `review-work` modifies codebase files (not OpenSpec files) to fix review findings. `explain`, `mockups`, and `flows` append a reference link to `design.md` (or `proposal.md` if no `design.md` exists) pointing to their generated artifact.
 - **Report location**: write reports to `openspec/changes/<change-id>/inspector-<subcommand>.md` so they travel with the change and get archived with it.
 - **Cite file:line** for every concrete finding so the reader can jump to the source.
 - **Severity tiers**: Critical (blocks implementation/archiving), Warning (should fix before landing), Suggestion (nice-to-have).
