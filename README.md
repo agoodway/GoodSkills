@@ -7,6 +7,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 ### Core Skills
 
 - `skills/review-work/SKILL.md`: multi-specialist code review skill
+- `skills/goodreview/SKILL.md`: portable multi-specialist code review using generic subagents
 - `skills/scratchpad/SKILL.md`: gitignored temporary project scratchpad workflow
 - `skills/git/SKILL.md`: git commit and pull request workflow commands
 - `skills/inspector/SKILL.md`: OpenSpec inspection and reconciliation workflows
@@ -110,19 +111,19 @@ npx skills add agoodway/skills --list
 Install the primary skills into the current project for Claude Code, OpenCode, and Codex:
 
 ```bash
-npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex
+npx skills add agoodway/skills --skill review-work --skill goodreview --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex
 ```
 
 Install globally instead:
 
 ```bash
-npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -g -a claude-code -a opencode -a codex -y
+npx skills add agoodway/skills --skill review-work --skill goodreview --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -g -a claude-code -a opencode -a codex -y
 ```
 
 Install from a local checkout:
 
 ```bash
-npx skills add /path/to/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex
+npx skills add /path/to/skills --skill review-work --skill goodreview --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex
 ```
 
 Install all skills from this repository:
@@ -134,7 +135,7 @@ npx skills add agoodway/skills --skill '*' -a claude-code -a opencode -a codex
 Use `--copy` if you want copied files instead of symlinks:
 
 ```bash
-npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex --copy
+npx skills add agoodway/skills --skill review-work --skill goodreview --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex --copy
 ```
 
 ## Skill Install Locations
@@ -230,7 +231,7 @@ EOF
 Install the skill globally and install all three agent sets globally from a temporary repository checkout:
 
 ```bash
-npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -g -a claude-code -a opencode -a codex -y
+npx skills add agoodway/skills --skill review-work --skill goodreview --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -g -a claude-code -a opencode -a codex -y
 tmpdir=$(mktemp -d)
 git clone https://github.com/agoodway/skills.git "$tmpdir/skills"
 mkdir -p ~/.claude/agents ~/.config/opencode/agents ~/.codex/agents
@@ -242,7 +243,7 @@ cp "$tmpdir/skills"/agents/codex/*.toml ~/.codex/agents/
 For a single project, run this from that project root:
 
 ```bash
-npx skills add agoodway/skills --skill review-work --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex
+npx skills add agoodway/skills --skill review-work --skill goodreview --skill scratchpad --skill git --skill inspector --skill inspector-review-update --skill document --skill understand --skill elixir-genius -a claude-code -a opencode -a codex
 tmpdir=$(mktemp -d)
 git clone https://github.com/agoodway/skills.git "$tmpdir/skills"
 mkdir -p .claude/agents .opencode/agents .codex/agents
@@ -283,6 +284,7 @@ Ask your runtime to run the skill:
 
 ```text
 /review-work
+/goodreview
 /scratchpad bootstrap
 /git help
 /inspector help
@@ -299,9 +301,13 @@ Or focus the review on a path or area:
 /review-work lib/my_app/accounts
 /review-work frontend settings modal
 /review-work docs setup guide
+/goodreview lib/my_app/accounts
+/goodreview frontend settings modal
 ```
 
 The skill gathers git context, selects specialists based on changed files, launches matching agents where supported, runs a Codex fresh-eyes/meta-analysis pass when available, and returns a prioritized review report.
+
+`/goodreview` is the portable engine: it selects roles from the diff, launches generic subagents with skill-owned briefs, and prints a prioritized report. It does not require named custom agents.
 
 ## Notes
 
