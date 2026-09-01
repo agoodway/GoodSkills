@@ -307,7 +307,7 @@ Or focus the review on a path or area:
 
 The skill gathers git context, selects specialists based on changed files, launches matching agents where supported, runs a Codex fresh-eyes/meta-analysis pass when available, and returns a prioritized review report.
 
-`/goodreview` is the portable engine: it selects roles from the diff, launches generic subagents with skill-owned briefs, and prints a prioritized report. It does not require named custom agents.
+`/goodreview` is the portable engine: it selects roles from the diff, launches generic subagents with skill-owned briefs, and prints a prioritized report. It does not require named custom agents. Fresh Eyes and meta-analysis use Codex MCP when available, and fall back to a generic pass otherwise.
 
 ## Notes
 

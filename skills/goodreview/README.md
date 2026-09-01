@@ -1,6 +1,6 @@
 # goodreview
 
-Multi-specialist code review of uncommitted changes using generic subagents. One skill install; no named custom agents.
+Multi-specialist code review of uncommitted changes using generic subagents. One skill install; no named custom agents. Uses Codex MCP for Fresh Eyes and meta-analysis when the runtime has it.
 
 ## Install
 

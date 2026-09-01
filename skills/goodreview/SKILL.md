@@ -41,6 +41,20 @@ Otherwise identify:
 
 If a focus argument was provided, inspect that path unless surrounding context is required. Include untracked files in scope.
 
+## Independent pass
+
+Fresh Eyes (Phase 2) and meta-analysis (Phase 4) use Codex MCP when a Codex session tool is available in this runtime. Use the first of these that exists:
+
+- `mcp__codex__codex`
+- `codex__codex`
+- `codex_codex`
+
+Call it with the pass prompt. If the tool accepts them, set `sandbox` to `read-only` and `approval-policy` to `never`.
+
+The Codex prompt is self-contained: Shared finding contract, the Fresh Eyes brief or the meta-analysis prompt, and the scope packet or collected findings.
+
+If none of those tools is available, do not fail. Run the pass as a generic subagent, or in the host labeled as a separate pass.
+
 ## Phase 2: Select roles and launch
 
 Always include at least three roles for code changes. Always add **Fresh Eyes**.
@@ -58,7 +72,7 @@ Always include at least three roles for code changes. Always add **Fresh Eyes**.
 Add Architecture when the diff spans layers, public APIs, infra, or data flow.
 Add QA execution when tests, lint, or CI should actually be run.
 
-Read [references/specialists.md](references/specialists.md). For each selected role, launch one generic subagent in parallel. Each subagent prompt contains, in this order:
+Read [references/specialists.md](references/specialists.md). For each selected role except Fresh Eyes, launch one generic subagent in parallel. Run Fresh Eyes via Independent pass. Each generic-subagent prompt contains, in this order:
 
 1. The Shared finding contract
 2. That role's brief
@@ -105,7 +119,7 @@ Run a second independent pass over the combined findings. Prompt:
 Review this multi-specialist analysis. What patterns do you see differently? What risks were not considered? How would you re-prioritize these findings? Challenge the assumptions. Identify findings that are over-prioritized, under-prioritized, unsupported, or missing.
 ```
 
-If a second-model or independent-session tool exists, use it for this pass (and for Fresh Eyes in Phase 2). Otherwise launch another generic subagent, or run the pass in the host and label it as a separate pass.
+Run this pass via Independent pass. Include the collected specialist findings in the prompt.
 
 ## Phase 5: Report
 
@@ -126,6 +140,9 @@ SPECIALIST FINDINGS
 
 FRESH EYES
 [Independent second pass]
+
+CODEX PERSPECTIVE
+[Include only if Codex MCP ran: independent analysis and re-prioritization]
 
 CROSS-SPECIALIST INSIGHTS
 [Systemic issues, conflicts, overlapping patterns]
@@ -159,6 +176,7 @@ Use these checks while executing the skill (not while authoring it):
 ## Rules
 
 - Use parallel generic subagents when the runtime supports them; otherwise sequential labeled briefs
+- Use Codex MCP for Fresh Eyes and meta-analysis when available; otherwise generic subagent or host pass
 - Every finding includes `file:line` or supporting file references, plus a suggested fix
 - Run each git command as its own shell call
 - Do not create issues, commit, or edit files
