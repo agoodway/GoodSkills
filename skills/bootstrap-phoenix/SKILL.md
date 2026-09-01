@@ -446,7 +446,11 @@ The `--config` flag in the check alias tells Sobelow to use this file. The `exit
 
 # Phoenix Server
 PHX_SERVER=true
+# Public hostname for emails, magic links, and OAuth issuer.
+# Local: localhost. Sprite: host from `sprite info` / `sprite url` (no scheme).
 PHX_HOST=localhost
+# PHX_SCHEME=https
+# PHX_URL_PORT=443
 PORT=4000
 
 # Database
@@ -527,6 +531,90 @@ end
 
 # Rest of your runtime config continues below...
 ```
+
+### 4.3 Public URL for magic links (dev + Sprite)
+
+`url(~p"/users/log-in/#{token}")` (and other absolute URLs) use `Endpoint` `:url`. Phoenix defaults that to `http://localhost:4000` in dev. A Sprite is `https://<sprite-name>-<org-id>.sprites.app`, so magic-link emails are unusable unless **dev** honors `PHX_HOST` the same way prod does.
+
+**File:** `config/runtime.exs`
+
+Add inside `if config_env() == :dev do` (create that block if missing). Do not put this only in the prod block — Sprite runs `MIX_ENV=dev`.
+
+```elixir
+if config_env() == :dev do
+  http_port = String.to_integer(System.get_env("PORT", "4000"))
+  phx_host = System.get_env("PHX_HOST")
+  remote_host? = is_binary(phx_host) and phx_host not in ["", "localhost"]
+  url_host = if remote_host?, do: phx_host, else: "localhost"
+  url_scheme = if remote_host?, do: System.get_env("PHX_SCHEME") || "https", else: "http"
+  explicit_url_port = System.get_env("PHX_URL_PORT")
+
+  url_port =
+    cond do
+      not remote_host? -> http_port
+      explicit_url_port in [nil, ""] and url_scheme == "https" -> 443
+      explicit_url_port in [nil, ""] -> http_port
+      true -> String.to_integer(explicit_url_port)
+    end
+
+  issuer =
+    cond do
+      url_scheme == "https" and url_port == 443 -> "https://#{url_host}"
+      url_scheme == "http" and url_port == 80 -> "http://#{url_host}"
+      true -> "#{url_scheme}://#{url_host}:#{url_port}"
+    end
+
+  config :APP_NAME, :oauth, issuer: issuer
+
+  config :APP_NAME, APP_NAMEWeb.Endpoint,
+    url: [host: url_host, port: url_port, scheme: url_scheme]
+end
+```
+
+If the app already has a `config_env() == :dev` Endpoint block (e.g. `live_reload:`), merge `url:` into that same `config` call. If the app has Boruta, set `config :boruta, Boruta.Oauth, issuer: issuer` next to `:oauth`.
+
+**File:** `test/APP_NAME/runtime_config_test.exs` (create if missing)
+
+```elixir
+test "PHX_HOST builds https magic-link URLs without localhost" do
+  original = %{
+    "PHX_HOST" => System.get_env("PHX_HOST"),
+    "PHX_SCHEME" => System.get_env("PHX_SCHEME"),
+    "PHX_URL_PORT" => System.get_env("PHX_URL_PORT"),
+    "PORT" => System.get_env("PORT")
+  }
+
+  try do
+    System.put_env("PHX_HOST", "demo-bn4gb.sprites.app")
+    System.put_env("PHX_SCHEME", "https")
+    System.put_env("PHX_URL_PORT", "443")
+    System.delete_env("PORT")
+
+    {config, _imports} =
+      Config.Reader.read_imports!("config/runtime.exs", env: :dev, target: :host)
+
+    url = get_in(config, [:APP_NAME, APP_NAMEWeb.Endpoint, :url])
+    assert url[:host] == "demo-bn4gb.sprites.app"
+    assert url[:scheme] == "https"
+    assert url[:port] == 443
+    assert get_in(config, [:APP_NAME, :oauth, :issuer]) == "https://demo-bn4gb.sprites.app"
+  after
+    Enum.each(original, fn
+      {key, nil} -> System.delete_env(key)
+      {key, value} -> System.put_env(key, value)
+    end)
+  end
+end
+```
+
+When running the app as a Sprite service, pass the public host (not `localhost`). Bind can stay on `127.0.0.1:4000`; only `:url` is the public name.
+
+```bash
+HOST=$(sprite url -s "$SPRITE" -o "$ORG" 2>/dev/null | awk '/^URL:/{print $2}' | sed -E 's#^https?://##; s#/$##')
+# sprite-env services create app --env "...PHX_HOST=$HOST,PHX_SCHEME=https,PHX_URL_PORT=443..."
+```
+
+Sprite URL auth defaults to `sprite` (Fly org login). Magic links from email need either that login or `sprite url update --auth public`.
 
 ## Phase 5: Tidewave Configuration
 
@@ -788,6 +876,7 @@ After running this command, you should have:
 - [ ] Updated formatter (.formatter.exs)
 - [ ] Environment files (.env.sample, .env.dev, .env.test)
 - [ ] Dotenvy integration in runtime.exs
+- [ ] Dev `PHX_HOST` public URL in runtime.exs (Sprite magic links) plus a runtime config test
 - [ ] Tidewave plug in endpoint.ex
 - [ ] LiveView debug annotations in dev.exs
 - [ ] Sentry config in config.exs and runtime.exs
@@ -847,6 +936,7 @@ mix ecto.reset              # Drop and recreate DB
 - **Run `mix check` before every commit** to catch issues early
 - **First Dialyzer run** builds the PLT and takes several minutes
 - **Tidewave**: Only runs in development, provides AI agent integration via MCP. Requires the endpoint plug and LiveView debug annotations for full functionality
+- **Sprite / magic links**: Set `PHX_HOST` (and `PHX_SCHEME` / `PHX_URL_PORT`) in **dev** runtime config. `url(~p"...")` will otherwise emit `http://localhost:4000`
 
 ---
 
