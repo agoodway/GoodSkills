@@ -1,6 +1,11 @@
 # Bootstrap MCP Server for Phoenix
 
-Set up a Model Context Protocol (MCP) server in your Phoenix application using Anubis MCP.
+Set up a Model Context Protocol (MCP) server in a Phoenix app using
+[ExMCP](https://github.com/azmaveth/ex_mcp) (`{:ex_mcp, "~> 1.1.1"}`).
+
+ExMCP owns protocol negotiation, sessions, notifications, Origin/Host
+validation, and streams. The app owns Bearer auth, a concatenating
+`CacheBody` reader, `Vary: Origin`, and a Bandit-safe GET SSE owner loop.
 
 ## Install
 
