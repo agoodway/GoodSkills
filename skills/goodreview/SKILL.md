@@ -41,19 +41,44 @@ Otherwise identify:
 
 If a focus argument was provided, inspect that path unless surrounding context is required. Include untracked files in scope.
 
-## Independent pass
+## Independent second-opinion passes
 
-Fresh Eyes (Phase 2) and meta-analysis (Phase 4) use Codex MCP when a Codex session tool is available in this runtime. Use the first of these that exists:
+Fresh Eyes (Phase 2) and meta-analysis (Phase 4) use a model other than the host when the required integration is available. Determine the host from explicit system or runtime identity; do not infer it only from which tools or commands are installed. Choose the second-opinion provider once per review, then use a new stateless session for each pass.
+
+### Codex host: Grok headless
+
+Run each pass as a new Grok CLI process in single-turn headless mode:
+
+```text
+grok --cwd [repository root] --permission-mode dontAsk --sandbox strict --tools read_file,list_dir,grep --deny 'MCPTool(*)' --disable-web-search --no-subagents --output-format plain -p "[pass prompt]"
+```
+
+Pass the prompt as one argument using an argument-safe execution mechanism; never allow prompt, diff, path, or user content to become shell syntax. Each prompt is self-contained:
+
+- Fresh Eyes: Shared finding contract, Fresh Eyes brief, scope packet, and relevant git diff
+- Meta-analysis: meta-analysis prompt and the collected specialist findings
+
+The tool allowlist lets Grok inspect the actual changed files while withholding edit and shell tools. Include the relevant diff in the prompt because Grok cannot run `git diff`. Keep MCP and web access disabled, and run Grok inside both its strict sandbox and any read-only sandbox supplied by the host. Do not weaken these controls to make a failed pass run.
+
+Do not install, update, or authenticate Grok as part of `goodreview`. If `grok -p` fails, returns no usable review, or is unavailable, fall back to a generic subagent or a separate host pass. Do not substitute a Codex session and describe it as an external Grok opinion.
+
+### Grok host: Codex through MCP
+
+Use the first available Codex session tool:
 
 - `mcp__codex__codex`
 - `codex__codex`
 - `codex_codex`
 
-Call it with the pass prompt. If the tool accepts them, set `sandbox` to `read-only` and `approval-policy` to `never`.
+Call it with the self-contained pass prompt. If the tool accepts them, set `sandbox` to `read-only` and `approval-policy` to `never`.
 
-The Codex prompt is self-contained: Shared finding contract, the Fresh Eyes brief or the meta-analysis prompt, and the scope packet or collected findings.
+If no Codex session tool is available, fall back to a generic subagent or a separate host pass. Do not substitute Grok and describe it as an external Codex opinion.
 
-If none of those tools is available, do not fail. Run the pass as a generic subagent, or in the host labeled as a separate pass.
+### Other or unknown host
+
+Prefer an available Codex session tool, then Grok through `grok -p`. Never select a provider known to be the host. If neither external provider is usable, fall back to a generic subagent or a separate host pass.
+
+Record the provider actually used for the report. Label fallbacks accurately; a host pass is independent in role, but is not a cross-model second opinion.
 
 ## Phase 2: Select roles and launch
 
@@ -138,11 +163,11 @@ Branch: [branch] | Files: [N] changed | Roles: [list]
 SPECIALIST FINDINGS
 [Role]: [key findings with file:line]
 
-FRESH EYES
-[Independent second pass]
+FRESH EYES — [Grok CLI | Codex via MCP | generic subagent | host fallback]
+[Independent findings]
 
-CODEX PERSPECTIVE
-[Include only if Codex MCP ran: independent analysis and re-prioritization]
+SECOND-OPINION META-ANALYSIS — [provider]
+[Independent analysis and re-prioritization]
 
 CROSS-SPECIALIST INSIGHTS
 [Systemic issues, conflicts, overlapping patterns]
@@ -176,7 +201,8 @@ Use these checks while executing the skill (not while authoring it):
 ## Rules
 
 - Use parallel generic subagents when the runtime supports them; otherwise sequential labeled briefs
-- Use Codex MCP for Fresh Eyes and meta-analysis when available; otherwise generic subagent or host pass
+- On Codex, use Grok through `grok -p`; on Grok, use Codex MCP; otherwise use an external provider that is not the host
+- Use a new stateless external session for Fresh Eyes and meta-analysis, and label the provider actually used
 - Every finding includes `file:line` or supporting file references, plus a suggested fix
 - Run each git command as its own shell call
 - Do not create issues, commit, or edit files
