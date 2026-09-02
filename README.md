@@ -42,7 +42,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `skills/listex/SKILL.md`: Listex/Yocal city platform CLI (content, city-scoped pages, email broadcasts)
 - `skills/zig-cli/SKILL.md`: build and maintain Zig CLI applications with cross-compilation and OpenAPI client generation
 
-### Bootstrap Skills (23 total)
+### Bootstrap Skills (24 total)
 
 - `skills/bootstrap-phoenix/SKILL.md`: Phoenix application
 - `skills/bootstrap-astro/SKILL.md`: Astro site
@@ -59,6 +59,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `skills/bootstrap-go-openapi/SKILL.md`: Go client from OpenAPI spec
 - `skills/bootstrap-google-analytics/SKILL.md`: Google Analytics (GA4) in Phoenix
 - `skills/bootstrap-mcp/SKILL.md`: MCP server for Phoenix
+- `skills/bootstrap-mcp-oauth/SKILL.md`: OAuth 2.1 + PKCE for a Phoenix MCP server
 - `skills/bootstrap-nebulex/SKILL.md`: Nebulex caching in Phoenix
 - `skills/bootstrap-openapi/SKILL.md`: OpenAPI for Phoenix
 - `skills/bootstrap-phoenix-docker/SKILL.md`: Docker releases for Phoenix
