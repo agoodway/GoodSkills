@@ -12,7 +12,7 @@ Scaffold a new PgFlow job module and generate the database migration to compile 
 ### 1. Detect App Context
 
 ```bash
-grep "app:" mix.exs | head -1
+rg -n "app:" mix.exs
 ```
 
 Extract the app module name (e.g., `MyApp`) and OTP app name (e.g., `my_app`).
@@ -95,7 +95,7 @@ Print how to enqueue the job:
 ## Guardrails
 
 - Always use `use PgFlow.Job` and the `@job` module attribute
-- Queue slugs must be unique across all flows and jobs
+- Queue slugs must be unique case-insensitively across all flows/jobs and at most 47 characters
 - All handler return values must be JSON-serializable
 - Do not create the migration file manually — use `mix pgflow.gen.job_migration`
 - For jobs that call external APIs, set appropriate timeouts and retry limits

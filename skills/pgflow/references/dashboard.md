@@ -4,12 +4,15 @@ Optional Phoenix LiveView dashboard for monitoring flows, jobs, runs, and worker
 
 ## Installation
 
-### 1. Generate Dashboard Migration
+### 1. Verify the core schema
 
 ```bash
-mix pgflow_dashboard.gen.migration
-mix ecto.migrate
+mix pgflow.check_schema --repo MyApp.Repo
 ```
+
+The core-backed LiveView dashboard needs no separate dashboard schema. Historical
+external SQL consumers may install `PgFlowDashboard.Migration`; do not generate
+it by default.
 
 ### 2. Optional: Add Performance Indexes
 

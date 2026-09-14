@@ -12,7 +12,7 @@ defmodule MyAppWeb.FlowLive do
   alias PgFlow.LiveClient
 
   def mount(_params, _session, socket) do
-    {:ok, LiveClient.init(socket, pubsub: MyApp.PubSub)}
+    {:ok, LiveClient.init(socket, pubsub: MyApp.PubSub, as: :run)}
   end
 end
 ```
@@ -91,10 +91,7 @@ Track a run that was started elsewhere:
 
 ```elixir
 def handle_event("track_run", %{"run_id" => run_id}, socket) do
-  case LiveClient.subscribe(socket, run_id, as: :tracked_run) do
-    {:ok, socket} -> {:noreply, socket}
-    {:error, reason, socket} -> {:noreply, socket}
-  end
+  {:noreply, LiveClient.subscribe(socket, run_id, as: :tracked_run)}
 end
 ```
 
@@ -103,7 +100,7 @@ end
 Unsubscribe when no longer tracking:
 
 ```elixir
-LiveClient.unsubscribe(socket, :run)
+LiveClient.unsubscribe(socket, as: :run)
 ```
 
 Automatic cleanup happens on LiveView unmount.
@@ -114,9 +111,9 @@ Automatic cleanup happens on LiveView unmount.
 
 ```elixir
 %PgFlow.Schema.Run{
-  id: "uuid",
+  run_id: "uuid",
   flow_slug: "process_order",
-  status: "started",          # "created", "started", "completed", "failed"
+  status: "started",          # "started", "completed", "failed"
   input: %{"order_id" => 123},
   output: nil,                # populated on completion
   remaining_steps: 3,
@@ -129,10 +126,10 @@ Automatic cleanup happens on LiveView unmount.
 ```elixir
 %PgFlow.Schema.StepState{
   step_slug: "validate",
-  status: "completed",        # "created", "started", "completed", "failed"
+  status: "completed",        # also "created", "started", "failed", "skipped"
   output: %{"valid" => true},
   error_message: nil,
-  attempts_made: 1
+  skip_reason: nil
 }
 ```
 

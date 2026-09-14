@@ -1,107 +1,79 @@
-# pgflow dashboard
+# Add the PgFlow dashboard
 
-Add the PgFlow LiveView dashboard to a Phoenix application for monitoring flows, jobs, runs, and workers.
+Install the complete core-backed LiveView dashboard, not just its route. Accept an optional mount path; default to `/pgflow`.
 
-## Inputs
+## Inspect first
 
-- **Arg form**: `/pgflow dashboard` — no additional args needed.
-- **With path**: `/pgflow dashboard /admin/pgflow` — mount at specified path instead of default `/pgflow`.
-
-## Prerequisites
-
-- PgFlow already bootstrapped (run `/pgflow bootstrap` first if not)
-- Phoenix LiveView available in the project
-
-## Workflow
-
-### 1. Detect App Context
+Confirm PgFlow is installed and compatible:
 
 ```bash
-grep "app:" mix.exs | head -1
+mix pgflow.check_schema --repo MyApp.Repo
+rg -n "PgFlowDashboard|pgflow_dashboard|livefilter|pgflow_dashboard/hooks" lib assets mix.exs config
 ```
 
-Extract the app module name and web module name (e.g., `MyApp`, `MyAppWeb`).
+Treat each component independently. Existing route text does not prove supervision, dependencies, hooks, or asset scanning are installed.
 
-### 2. Check if Dashboard Already Installed
+## Install runtime pieces
 
-```bash
-grep -r "pgflow_dashboard" lib/ --include="*.ex" -l
+Add `livefilter` explicitly to `mix.exs` because it is optional in PgFlow, then run `mix deps.get`. Use the version compatible with the installed PgFlow release rather than copying a stale hardcoded constraint.
+
+Start the dashboard after the repo/PubSub:
+
+```elixir
+children = [
+  MyApp.Repo,
+  {Phoenix.PubSub, name: MyApp.PubSub},
+  PgFlowDashboard,
+  MyAppWeb.Endpoint
+]
 ```
 
-If already present, tell the user and stop.
+Add the protected route:
 
-### 3. Generate Dashboard Migration
+```elixir
+import PgFlowDashboard.Router
 
-```bash
-mix pgflow_dashboard.gen.migration
-mix ecto.migrate
+scope "/" do
+  pipe_through [:browser, :require_authenticated_admin]
+
+  pgflow_dashboard "/pgflow",
+    repo: MyApp.Repo,
+    pubsub: MyApp.PubSub
+end
 ```
 
-### 4. Optional: Add Performance Indexes
+An `on_mount` authorization hook is also supported. Never expose the dashboard publicly by default.
 
-Ask the user if they expect high traffic on the dashboard. If yes:
+## Configure assets
+
+Import PgFlow Dashboard and LiveFilter hooks from their dependency asset paths and merge them into the LiveSocket hooks. The installed PgFlow `docs/DASHBOARD.md` is the authority for the current hook names.
+
+Ensure the JS bundler can resolve dependency assets. For esbuild, set `NODE_PATH` to the application's `deps/` directory. Add Tailwind sources for:
+
+```css
+@source "../../deps/pgflow/lib/pgflow_dashboard";
+@source "../../deps/daisy_ui_components";
+@source "../../deps/livefilter";
+```
+
+Use equivalent content globs for legacy `tailwind.config.js` projects.
+
+## Database objects
+
+The core-backed dashboard does not need `PgFlowDashboard.Migration`. Only historical external SQL consumers need those views/functions. For those consumers, use `mix pgflow.setup --upgrade --dashboard` during a coordinated PgFlow upgrade or generate a dedicated `mix pgflow_dashboard.gen.migration` wrapper.
+
+Optional high-traffic indexes are still available:
 
 ```bash
 mix pgflow_dashboard.gen.indexes
 mix ecto.migrate
 ```
 
-### 5. Add to Router
-
-Read `lib/<app>_web/router.ex` and add the dashboard route.
-
-Add the import at the top of the router module:
-
-```elixir
-import PgFlowDashboard.Router
-```
-
-Add a scope block — default path is `/pgflow`, but use the user's arg if provided:
-
-```elixir
-scope "/" do
-  pipe_through [:browser]
-  pgflow_dashboard "/pgflow", repo: MyApp.Repo, pubsub: MyApp.PubSub
-end
-```
-
-### 6. Add Access Control (Production)
-
-Ask the user how they want to protect the dashboard:
-- Behind existing admin auth plug? → Add to an authenticated scope
-- HTTP basic auth? → Add a simple plug
-- No protection needed (internal tool)?
-
-Example with existing auth:
-
-```elixir
-scope "/admin" do
-  pipe_through [:browser, :require_admin]
-  pgflow_dashboard "/pgflow", repo: MyApp.Repo, pubsub: MyApp.PubSub
-end
-```
-
-### 7. Verify
+## Verify
 
 ```bash
-mix phx.routes | grep pgflow
+mix phx.routes | rg pgflow
+mix assets.build
 ```
 
-Tell the user the dashboard URL and what pages are available:
-
-| Page | Content |
-|------|---------|
-| Overview | Active workers, run counts, key metrics |
-| Flows | Flow definitions with 24h statistics |
-| Jobs | Job definitions with statistics |
-| Crons | Scheduled tasks with next run times |
-| Runs | Filterable list with status, duration, progress |
-| Workers | Worker health status and throughput |
-| Run Detail | Interactive SVG DAG, timeline, input/output |
-
-## Guardrails
-
-- Do not add the dashboard if PgFlow is not bootstrapped
-- Always protect the dashboard in production with authentication
-- The dashboard requires `pubsub` in PgFlow config for real-time updates
-- If `pubsub` is not configured, warn the user that real-time updates won't work
+Boot the app and smoke-test overview, flows, jobs, crons, runs, worker detail, filtering, keyboard/mobile menu hooks, real-time updates, and the authenticated boundary. If data is absent, first call `PgFlow.Metrics.overview(MyApp.Repo)` in IEx; if filtering is broken, recheck LiveFilter, `NODE_PATH`, hooks, and Tailwind sources.

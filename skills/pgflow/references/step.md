@@ -16,13 +16,13 @@ If a module name was provided, find the file:
 
 ```bash
 # Search for the module definition
-grep -r "defmodule MyApp.Flows.ProcessOrder" lib/ --include="*.ex" -l
+rg -l "defmodule MyApp.Flows.ProcessOrder" lib -g '*.ex'
 ```
 
 If no module was provided, list available flows:
 
 ```bash
-grep -r "use PgFlow.Flow" lib/ --include="*.ex" -l
+rg -l "use PgFlow.Flow" lib -g '*.ex'
 ```
 
 Present the list and ask the user which flow to modify.
@@ -112,7 +112,9 @@ mix pgflow.gen.flow_migration MyApp.Flows.ProcessOrder
 mix ecto.migrate
 ```
 
-Warn the user: recompiling a flow creates a new version. Existing in-progress runs continue on the old version; new runs use the updated definition.
+Warn the user: a production shape change fails closed to preserve history. Prefer
+a new flow slug. Destructive local upsert/recompilation can delete definition and
+run history; it is not a versioned migration for in-progress runs.
 
 ### 8. Show Updated DAG
 
@@ -134,7 +136,7 @@ validate → enrich → process → notify
 | `timeout` | integer | flow default | Override execution timeout |
 | `start_delay` | integer | 0 | Delay before step starts (seconds) |
 | `array` | atom | nil | For map steps: step whose output to iterate |
-| `if` / `if_not` | map | nil | Input-pattern gate (jsonb containment) — [conditional-steps.md](conditional-steps.md) |
+| `if` / `if_not` | JSON value | nil | Input-pattern gate (jsonb containment) — [conditional-steps.md](conditional-steps.md) |
 | `when_unmet` | atom | `:skip` | `:fail`/`:skip`/`:skip_cascade` when the gate is unsatisfied |
 | `when_exhausted` | atom | `:fail` | `:fail`/`:skip`/`:skip_cascade` when retries are exhausted |
 

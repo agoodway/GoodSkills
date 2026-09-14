@@ -28,9 +28,9 @@ end
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `queue` | atom | required | Unique queue identifier |
-| `max_attempts` | integer | 3 | Maximum retry attempts |
-| `base_delay` | integer | 5 | Initial backoff delay in seconds |
-| `timeout` | integer | 60 | Execution timeout in seconds |
+| `max_attempts` | integer | 1 | Maximum retry attempts |
+| `base_delay` | integer | 1 | Initial backoff delay in seconds |
+| `timeout` | integer | 30 | Execution timeout in seconds |
 | `cron` | keyword | nil | Scheduled execution (`schedule:` cron expr, `input:` default input) |
 
 ### perform Block

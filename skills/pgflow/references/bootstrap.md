@@ -1,251 +1,71 @@
-# pgflow bootstrap
+# Bootstrap PgFlow
 
-Add PgFlow to an existing Phoenix application. This walks through dependency installation, database setup, configuration, supervision tree integration, and creating a first flow and job.
+Add PgFlow to an existing Phoenix application. Verify the installed dependency and its documentation first; a path/git checkout may contain capabilities that published Hex `0.4.0` does not.
 
 ## Prerequisites
 
-Verify before starting:
-1. Phoenix 1.7+ application with PostgreSQL
-2. Ecto configured with a Repo module
-3. Phoenix.PubSub in supervision tree (standard in Phoenix apps)
+- Elixir 1.18+, PostgreSQL 17+, and an Ecto repo.
+- `citext`, `pg_trgm`, `pgcrypto`, and pgmq.
+- `pg_cron` only for cron flows/jobs; it also requires server configuration and a PostgreSQL restart.
 
-## Phase 1: Add Dependency
+## Install
 
-Add PgFlow to `mix.exs` (GitHub `main`, matching Goodviews):
+Add the intended released, git, or path dependency and run `mix deps.get`. Do not silently replace a requested local/git build with `{:pgflow, "~> 0.3.4"}`.
 
-```elixir
-defp deps do
-  [
-    {:pgflow, github: "agoodway/pgflow", branch: "main"}
-  ]
-end
-```
+Generate consumer-owned wrapper migrations in this order:
 
 ```bash
-mix deps.get
-```
-
-## Phase 2: Database Setup
-
-Generate consumer migrations. Each writes one wrapper into `priv/repo/migrations/`:
-
-```bash
-# 1. citext, pg_trgm, pgcrypto, pg_cron (`--no-cron` if pg_cron isn't available)
-mix pgflow.gen.postgres_extensions_migration
-
-# 2. pgmq via SQL (skip on hosts that already ship pgmq, e.g. Supabase)
-mix pgflow.gen.pgmq_migration
-
-# 3. pgflow schema + Elixir helpers. No `--dashboard` unless requested.
+mix pgflow.gen.postgres_extensions_migration # add --no-cron if unsupported
+mix pgflow.gen.pgmq_migration                # omit when the host supplies pgmq
 mix pgflow.setup
-
 mix ecto.migrate
-mix pgflow.check_schema
+mix pgflow.check_schema --repo MyApp.Repo
 ```
 
-Then edit generated migrations (Goodviews pattern):
+`mix pgflow.setup` installs core plus Elixir helpers. An already-applied wrapper never reruns after a dependency bump; use the coordinated upgrade workflow in [upgrading.md](upgrading.md).
 
-- Rename modules to `MyApp.Repo.Migrations.*` if the generator emits `PgFlow.Repo.Migrations.*`
-- Keep `@disable_ddl_transaction true` / `@disable_migration_lock true` on the extensions migration
-- Wrap `CREATE EXTENSION pg_cron` and later `cron.schedule` / `cron.unschedule` so they run only when `current_setting('cron.database_name', true) IS NOT DISTINCT FROM current_database()`
-- citext uses `IF NOT EXISTS`; do not drop citext on down if auth tables already own it
-
-## Phase 3: Configuration
-
-**File:** `config/config.exs` — repo for enqueue without a running supervisor (tests):
+## Configure and supervise
 
 ```elixir
-config :pgflow, repo: MyApp.Repo
-```
-
-**File:** `config/runtime.exs` — omit in test so Application does not start workers:
-
-```elixir
-if config_env() != :test do
-  config :my_app, PgFlow,
-    repo: MyApp.Repo,
-    flows: [],
-    jobs: [],
-    signal_strategy: :notify,
-    max_concurrency: 10
-end
-```
-
-Do **not** set `:pubsub` unless adding LiveClient / dashboard. See [config.md](config.md) for all options.
-
-## Phase 4: Supervision Tree
-
-Add a config-gated child in `lib/my_app/application.ex`. Do **not** call `Mix.env/0`. Tests omit `:my_app, PgFlow`, so this starts nothing there:
-
-```elixir
-children =
-  [
-    MyApp.Repo,
-    {Phoenix.PubSub, name: MyApp.PubSub}
-  ] ++
-    pgflow_children() ++
-    [
-      MyAppWeb.Endpoint
-    ]
-
-defp pgflow_children do
-  case Application.get_env(:my_app, PgFlow) do
-    opts when is_list(opts) -> [{PgFlow, opts}]
-    _other -> []
-  end
-end
-```
-
-## Phase 5: Create a Flow
-
-See [flows.md](flows.md) for the full Flow DSL reference.
-
-### 5.1 Define the Flow Module
-
-Create `lib/my_app/flows/example_flow.ex`:
-
-```elixir
-defmodule MyApp.Flows.ExampleFlow do
-  use PgFlow.Flow
-
-  @flow queue: :example_flow, max_attempts: 3, base_delay: 5, timeout: 60
-
-  step :validate do
-    fn input, _ctx ->
-      %{valid: true, data: input}
-    end
-  end
-
-  step :process, depends_on: [:validate] do
-    fn deps, _ctx ->
-      %{processed: true, source: deps["validate"]}
-    end
-  end
-
-  step :finalize, depends_on: [:process] do
-    fn deps, _ctx ->
-      %{status: "completed"}
-    end
-  end
-end
-```
-
-### 5.2 Register the Flow
-
-Add the module to the `flows` list in config:
-
-```elixir
-config :my_app, PgFlow,
+config :my_app, MyApp.PgFlow,
   repo: MyApp.Repo,
   flows: [MyApp.Flows.ExampleFlow],
-  # ...
+  jobs: [],
+  signal_strategy: :polling,
+  pubsub: MyApp.PubSub
 ```
 
-### 5.3 Compile to Database
+Start PgFlow after the repo:
+
+```elixir
+children = [
+  MyApp.Repo,
+  {PgFlow, Application.fetch_env!(:my_app, MyApp.PgFlow)},
+  MyAppWeb.Endpoint
+]
+```
+
+Polling is the safest portable default. `:notify` requires compatible pgmq notification functions and retains fallback polling.
+
+Workers compile new definitions and verify existing shapes before polling. Production mismatches fail closed rather than replacing history. Do not treat `PgFlow.FlowStarter.ready?/0` alone as usable readiness; inspect `status/0`, `module_status/1`, `healthy?/0`, and persisted `PgFlow.Workers.healthy?/2`.
+
+The migration role needs extension and schema/function/type/table/index DDL
+permissions. The runtime role needs schema usage, function execution, worker DML,
+and startup permission for `ensure_flow_compiled` and `pgmq.create`; alternatively,
+pre-provision definitions and prove startup with the restricted role.
+
+## Verify the first definition
+
+Define/register a flow or job, generate its migration if your deployment workflow uses definition migrations, migrate, start a run, and assert its terminal state:
 
 ```bash
 mix pgflow.gen.flow_migration MyApp.Flows.ExampleFlow
 mix ecto.migrate
 ```
 
-### 5.4 Start a Flow
-
 ```elixir
 {:ok, run_id} = PgFlow.start_flow(:example_flow, %{"key" => "value"})
+{:ok, run} = PgFlow.get_run_with_states(run_id)
 ```
 
-## Phase 6: Create a Job (Optional)
-
-See [jobs.md](jobs.md) for the Job DSL reference.
-
-Create `lib/my_app/jobs/example_job.ex`:
-
-```elixir
-defmodule MyApp.Jobs.ExampleJob do
-  use PgFlow.Job
-
-  @job queue: :example_job, max_attempts: 5, base_delay: 10, timeout: 120
-
-  perform :run do
-    fn input, _ctx ->
-      %{result: "processed #{input["id"]}"}
-    end
-  end
-end
-```
-
-Register, compile, and enqueue:
-
-```elixir
-# Add to config
-config :my_app, PgFlow,
-  jobs: [MyApp.Jobs.ExampleJob],
-  # ...
-```
-
-```bash
-mix pgflow.gen.job_migration MyApp.Jobs.ExampleJob
-mix ecto.migrate
-```
-
-```elixir
-# Enqueue
-{:ok, run_id} = PgFlow.enqueue(MyApp.Jobs.ExampleJob, %{"id" => 42})
-```
-
-## Phase 7: LiveView Integration (Optional)
-
-See [liveview.md](liveview.md) for the LiveClient API.
-
-```elixir
-defmodule MyAppWeb.FlowLive do
-  use MyAppWeb, :live_view
-  alias PgFlow.LiveClient
-
-  def mount(_params, _session, socket) do
-    {:ok, LiveClient.init(socket, pubsub: MyApp.PubSub)}
-  end
-
-  def handle_event("start", params, socket) do
-    case LiveClient.start_flow(socket, :example_flow, params, as: :run) do
-      {:ok, socket} -> {:noreply, socket}
-      {:error, reason, socket} -> {:noreply, put_flash(socket, :error, reason)}
-    end
-  end
-
-  def handle_info({:pgflow, _, _} = msg, socket) do
-    {:noreply, LiveClient.handle_info(msg, socket)}
-  end
-end
-```
-
-## Phase 8: Dashboard (Optional)
-
-See [dashboard.md](dashboard.md) for dashboard setup.
-
-```bash
-mix pgflow_dashboard.gen.migration
-mix ecto.migrate
-```
-
-In `router.ex`:
-
-```elixir
-import PgFlowDashboard.Router
-
-scope "/" do
-  pipe_through [:browser]
-  pgflow_dashboard "/pgflow", repo: MyApp.Repo, pubsub: MyApp.PubSub
-end
-```
-
-## Verification Checklist
-
-- [ ] PgFlow dependency added (`github: "agoodway/pgflow"`) and fetched
-- [ ] Extensions + pgmq + `mix pgflow.setup` migrations generated, modules renamed, cron guarded, migrated
-- [ ] Schema verified with `mix pgflow.check_schema`
-- [ ] `config :pgflow, repo:` plus non-test `:my_app, PgFlow` config
-- [ ] Config-gated `{PgFlow, opts}` child in the supervision tree (no workers in test)
-- [ ] At least one flow or job defined
-- [ ] Flow/job compiled to database (`gen.flow_migration` / `gen.job_migration`)
-- [ ] Flow starts and completes successfully
+Run the gates in [compatibility.md](compatibility.md). Without `PGFLOW_REQUIRE_DB=1`, database tests may be silently excluded.

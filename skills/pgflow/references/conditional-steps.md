@@ -19,12 +19,15 @@ All four options work on both `step` and `map`, in the compile-time DSL and in r
 
 | Option | Values | Default | Meaning |
 |---|---|---|---|
-| `if:` | JSON-encodable map | — | Step runs only if its input **contains** this pattern |
-| `if_not:` | JSON-encodable map | — | Step runs only if its input does **not** contain this pattern |
+| `if:` | JSON-compatible value | — | Step runs only if its input **contains** this pattern |
+| `if_not:` | JSON-compatible value | — | Step runs only if its input does **not** contain this pattern |
 | `when_unmet:` | `:fail` / `:skip` / `:skip_cascade` | `:skip` | Outcome when `if:`/`if_not:` is not satisfied. Requires `if:` or `if_not:` |
 | `when_exhausted:` | `:fail` / `:skip` / `:skip_cascade` | `:fail` | Outcome when the step exhausts `max_attempts` |
 
-String equivalents are accepted everywhere: `"fail"`, `"skip"`, `"skip_cascade"`, and the SQL literal `"skip-cascade"`. Defaults live in the database — options you don't set fall through to SQL `DEFAULT`s.
+The compile-time DSL accepts atom modes. Runtime `upsert_flow/2` also normalizes
+the string equivalents `"fail"`, `"skip"`, `"skip_cascade"`, and the SQL literal
+`"skip-cascade"`. Defaults live in the database — options you don't set fall
+through to SQL `DEFAULT`s.
 
 ## What the Pattern Matches Against
 
@@ -46,7 +49,8 @@ Matching is PostgreSQL jsonb containment (`@>`) — the pattern must be *contain
     when_unmet: :skip_cascade do
   ```
 
-Keys are JSON strings, never atoms — `if: %{plan: "premium"}` on a dependent step will not match `%{"create_account" => ...}`.
+Persisted JSON keys are strings. Atom keys in DSL map literals encode to strings,
+but dependent patterns still need the dependency slug nesting shown above.
 
 ## Skip Semantics
 
@@ -135,7 +139,12 @@ PgFlow.Client.upsert_flow("acct_123_sync_v1",
 )
 ```
 
-Validation errors: `{:invalid_condition_pattern, key, value}` (pattern not a map), `{:invalid_condition_mode, key, value}` (mode outside fail/skip/skip_cascade), `{:when_unmet_requires_condition, slug}` (`when_unmet:` without `if:`/`if_not:`).
+Compile-time DSL patterns may be recursive JSON maps, arrays, strings, numbers,
+booleans, or `nil`. Structs, tuples, functions, invalid UTF-8, improper lists,
+and keyword lists are rejected. Runtime `upsert_flow/2` has a narrower map-pattern
+contract; use map patterns for definitions that must be portable across both APIs.
+
+Validation errors include invalid pattern/mode and `when_unmet:` without a condition.
 
 ## Compiling and Version Requirements
 

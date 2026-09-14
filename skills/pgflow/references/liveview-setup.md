@@ -13,7 +13,7 @@ Scaffold a Phoenix LiveView module with PgFlow LiveClient integration for real-t
 ### 1. Detect App Context
 
 ```bash
-grep "app:" mix.exs | head -1
+rg -n "app:" mix.exs
 ```
 
 Extract the app module name and web module name.
@@ -23,13 +23,13 @@ Extract the app module name and web module name.
 If a flow slug was provided, verify it exists:
 
 ```bash
-grep -r "queue: :process_order" lib/ --include="*.ex" -l
+rg -l "queue: :process_order" lib -g '*.ex'
 ```
 
 If no flow was specified, list available flows:
 
 ```bash
-grep -r "use PgFlow.Flow" lib/ --include="*.ex" -l
+rg -l "use PgFlow.Flow" lib -g '*.ex'
 ```
 
 Read each to extract queue slugs and present them to the user.
@@ -58,7 +58,7 @@ defmodule MyAppWeb.OrderFlowLive do
   def mount(_params, _session, socket) do
     socket =
       socket
-      |> LiveClient.init(pubsub: MyApp.PubSub)
+      |> LiveClient.init(pubsub: MyApp.PubSub, as: :run)
       |> assign(:form, to_form(%{"order_id" => ""}))
 
     {:ok, socket}
@@ -197,10 +197,7 @@ To track a run started elsewhere (e.g., from an API):
 
 ```elixir
 def handle_event("track", %{"run_id" => run_id}, socket) do
-  case LiveClient.subscribe(socket, run_id, as: :tracked_run) do
-    {:ok, socket} -> {:noreply, socket}
-    {:error, reason, socket} -> {:noreply, socket}
-  end
+  {:noreply, LiveClient.subscribe(socket, run_id, as: :tracked_run)}
 end
 ```
 
@@ -210,4 +207,5 @@ end
 - Always handle `{:pgflow, _, _}` messages in `handle_info` — missing this means no updates
 - The `pubsub` option must match the PgFlow config
 - LiveClient applies incremental updates — no polling needed
-- Status only advances forward: `created` → `started` → `completed`/`failed`
+- Step status generally advances `created` → `started` → terminal; an authoritative
+  `skipped` may replace a provisional `failed` for `when_exhausted: :skip`

@@ -12,7 +12,7 @@ Scaffold a new PgFlow flow module with step definitions and generate the databas
 ### 1. Detect App Context
 
 ```bash
-grep "app:" mix.exs | head -1
+rg -n "app:" mix.exs
 ```
 
 Extract the app module name (e.g., `MyApp`) and OTP app name (e.g., `my_app`).
@@ -109,7 +109,7 @@ When generating steps, apply these patterns:
 ## Guardrails
 
 - Always use `use PgFlow.Flow` and the `@flow` module attribute
-- Queue slugs must be unique across all flows and jobs
+- Queue slugs must be unique case-insensitively across all flows/jobs and at most 47 characters
 - All handler return values must be JSON-serializable
 - Do not create the migration file manually — use `mix pgflow.gen.flow_migration`
 - If the flow has a `map` step, the array source step must return a list

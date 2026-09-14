@@ -18,10 +18,10 @@ end
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `queue` | atom | required | Unique queue identifier (becomes PGMQ queue name). `slug:` is accepted as an alias, but prefer `queue:` |
-| `max_attempts` | integer | 3 | Maximum retry attempts per step |
-| `base_delay` | integer | 5 | Initial backoff delay in seconds |
-| `timeout` | integer | 60 | Execution timeout per step in seconds |
+| `queue` | atom | required | Logical flow slug; current physical queue is its lowercase form. Must be case-insensitively unique and at most 47 characters. `slug:` is an alias. |
+| `max_attempts` | integer | 1 | Maximum retry attempts per step |
+| `base_delay` | integer | 1 | Initial backoff delay in seconds |
+| `timeout` | integer | 30 | Execution timeout per step in seconds |
 | `cron` | keyword | nil | Scheduled execution (`schedule:` cron expr, `input:` default input) |
 
 ## Step Types
@@ -77,8 +77,8 @@ The `:array` option specifies which dependency step produces the array to iterat
 | `timeout` | integer | flow default | Override execution timeout |
 | `start_delay` | integer | 0 | Delay before step starts (seconds) |
 | `array` | atom | nil | For map steps: which step's output to iterate |
-| `if` | map | nil | Run only if the step's input contains this pattern (jsonb `@>`) — see [conditional-steps.md](conditional-steps.md) |
-| `if_not` | map | nil | Run only if the step's input does NOT contain this pattern |
+| `if` | JSON value | nil | Run only if the step's input contains this pattern (jsonb `@>`) — see [conditional-steps.md](conditional-steps.md) |
+| `if_not` | JSON value | nil | Run only if the step's input does NOT contain this pattern |
 | `when_unmet` | `:fail`/`:skip`/`:skip_cascade` | `:skip` | Outcome when `if`/`if_not` is unsatisfied (requires one of them) |
 | `when_exhausted` | `:fail`/`:skip`/`:skip_cascade` | `:fail` | Outcome when retries are exhausted — `:skip` makes a step fail-soft |
 
@@ -121,7 +121,10 @@ Handlers can return:
 raise "unexpected error"
 ```
 
-All return values must be JSON-serializable (maps, lists, strings, numbers, booleans, nil).
+All return values must be JSON-serializable (maps, lists, strings, numbers,
+booleans, or nil). Valid falsy scalars are preserved. Invalid output fails the
+task with `Handler output is not JSON encodable` and follows retry policy; it is
+never wrapped in a synthetic object.
 
 ## DAG Rules
 
@@ -132,6 +135,7 @@ All return values must be JSON-serializable (maps, lists, strings, numbers, bool
 - A skipped (non-cascade) dependency's key is **omitted** from dependent inputs — dependents still run; `:skip_cascade` skips the dependents too. See [conditional-steps.md](conditional-steps.md)
 - Runs containing skipped steps complete successfully — skipped counts as resolved, not failed
 - Map steps expand at runtime based on the array length
+- Map steps accept zero or one dependency; dependent sources must produce arrays, and empty arrays complete without tasks
 - Multiple root steps run in parallel
 
 ## Example: Multi-Step Order Pipeline
@@ -151,14 +155,14 @@ defmodule MyApp.Flows.ProcessOrder do
 
   step :lookup_inventory do
     fn input, _ctx ->
-      %{available: true, items: input["items"]}
+      input["items"]
     end
   end
 
   # Waits for both root steps
   step :reserve_inventory, depends_on: [:validate_order, :lookup_inventory] do
     fn deps, _ctx ->
-      %{reserved: true, items: deps["lookup_inventory"]["items"]}
+      %{reserved: true, items: deps["lookup_inventory"]}
     end
   end
 
@@ -169,15 +173,15 @@ defmodule MyApp.Flows.ProcessOrder do
     end
   end
 
-  # Sends notifications to each party in parallel
-  map :notify_parties, array: :charge_payment do
+  # Processes each inventory item in parallel
+  map :notify_items, array: :lookup_inventory do
     fn item, _ctx ->
-      %{notified: true}
+      %{notified: true, item: item}
     end
   end
 
   # Final step
-  step :complete, depends_on: [:notify_parties] do
+  step :complete, depends_on: [:charge_payment, :notify_items] do
     fn deps, _ctx ->
       %{status: "completed"}
     end
@@ -199,6 +203,10 @@ This creates:
 - PGMQ queue `pgmq.q_process_order`
 - Step definitions in `pgflow.steps`
 - pg_cron job if `:cron` option specified
+
+Worker startup also compiles new definitions and verifies existing definitions.
+In production, shape mismatches fail closed to preserve history. Prefer a new
+slug for incompatible changes; destructive local upsert can remove history.
 
 ## Starting Flows
 

@@ -26,6 +26,12 @@ config :my_app, PgFlow,
 
   # Notify fallback (for :notify strategy)
   notify_fallback_interval: 30_000,  # safety net poll every 30s
+  notify_throttle_ms: 250,
+
+  # Liveness and stalled-task recovery
+  heartbeat_interval: 10_000, # maximum 20s
+  recovery_interval: 15_000,
+  stale_threshold: 60,        # seconds beyond effective step/flow timeout
 
   # Phoenix.PubSub for telemetry broadcasting to LiveViews
   pubsub: MyApp.PubSub,
@@ -47,6 +53,10 @@ config :my_app, PgFlow,
 | `min_poll_interval` | integer | 1000 | Min poll interval in ms (polling strategy) |
 | `max_poll_interval` | integer | 5000 | Max poll interval in ms (polling strategy) |
 | `notify_fallback_interval` | integer | 30000 | Safety net poll in ms (notify strategy) |
+| `notify_throttle_ms` | integer | 250 | Notify trigger throttle in ms (`0` notifies every insert) |
+| `heartbeat_interval` | integer | 10000 | Persisted worker heartbeat in ms; maximum 20000 |
+| `recovery_interval` | integer | 15000 | Interval between stalled-task recovery sweeps in ms |
+| `stale_threshold` | integer | 60 | Seconds added beyond effective task timeout before recovery |
 | `pubsub` | module | nil | Phoenix.PubSub module for LiveView broadcasting |
 | `attach_default_logger` | boolean | false | Enable structured telemetry logging |
 
@@ -80,12 +90,14 @@ PgFlow starts this supervision tree:
 
 ```
 PgFlow.Supervisor
-├── PgFlow.FlowRegistry (ETS-backed flow lookup)
+├── PgFlow.TaskSupervisor
+├── PgFlow.Signal.Notify (only for :notify)
 ├── PgFlow.WorkerSupervisor (DynamicSupervisor)
 │   ├── Worker.Server (one per flow)
 │   ├── Worker.Server (one per job)
 │   └── ...
-└── PgFlow.Signal.Notify (if :notify strategy)
+├── PgFlow.Worker.StalledTaskRecovery
+└── PgFlow.FlowStarter (definition/bootstrap convergence)
 ```
 
 Each `Worker.Server` is a GenServer that:
@@ -94,6 +106,10 @@ Each `Worker.Server` is a GenServer that:
 3. Dispatches tasks to `Task.Supervisor` for crash isolation
 4. Marks tasks complete/failed based on handler results
 5. Handles retries with exponential backoff
+
+Workers are transient children: crashes and database deprecation exits restart,
+while `PgFlow.stop_worker/1` drains and durably removes the child. Do not use the
+server PID stop call as an operator primitive. See [operations.md](operations.md).
 
 ## Environment-Specific Configuration
 
