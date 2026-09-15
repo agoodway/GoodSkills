@@ -10,7 +10,7 @@ Add PgFlow to an existing Phoenix application. Verify the installed dependency a
 
 ## Install
 
-Add the intended released, git, or path dependency and run `mix deps.get`. Do not silently replace a requested local/git build with `{:pgflow, "~> 0.3.4"}`.
+Add the intended released, git, or path dependency and run `mix deps.get`. Do not silently replace a requested local/git build with `{:pgflow, "~> 0.4.0"}`.
 
 Generate consumer-owned wrapper migrations in this order:
 
