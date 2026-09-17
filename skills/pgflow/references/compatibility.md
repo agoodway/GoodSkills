@@ -9,6 +9,12 @@ PGFLOW_REQUIRE_DB=1 mix test --only migration
 mix quality
 ```
 
+When the release includes a database restore, branch replacement, major-version
+project cutover, or point-in-time recovery, also compare source and target
+`cron.job` inventories and run the host application's schedule reconciliation.
+PgFlow schema compatibility and worker heartbeats do not cover application-owned
+pg_cron registrations.
+
 Run migration tests separately because they mutate the shared test schema. Without `PGFLOW_REQUIRE_DB=1`, an unreachable database can exclude integration tests while the command succeeds.
 
 The schema gate checks core/helpers version floors, required tables and pgmq, sole four-argument `start_tasks(text,bigint[],uuid,text)`, absence of the legacy three-argument claim, `ensure_flow_compiled(text,jsonb)`, queue constraints, task statuses, and the eight-field `step_task_record` with `attempts_count`. Worker bootstrap checks a narrower runtime-critical subset; it does not replace this gate.

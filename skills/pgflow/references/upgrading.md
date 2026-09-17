@@ -29,3 +29,43 @@ Core V02 rewrites `step_tasks`, scans constraints, creates a non-concurrent uniq
 Never rerun an old setup wrapper. Use `mix pgflow.stamp` only after proving an untracked legacy schema exactly matches the expected baseline; stamping drift makes later migrations unsafe.
 
 Production shape mismatch preserves history. Destructive recompilation is controlled by the database `app.settings.jwt_secret` GUC matching the Supabase local default—not by `MIX_ENV`. Never set that GUC on a history-bearing database.
+
+## Database restores and project cutovers
+
+Treat database movement as a separate state-transfer boundary. Installing
+`pg_cron`, restoring application tables, and passing
+`mix pgflow.check_schema` do **not** prove recurring jobs exist on the target.
+Extension-owned `cron.job` rows may be absent even though canonical host rows
+and `schema_migrations` were restored.
+
+Before stopping the source database:
+
+1. Snapshot source `cron.job` names, schedules, commands, active state,
+   database, and owner.
+2. Inventory the application's canonical scheduling rows and singleton/global
+   jobs. Classify PgFlow-owned jobs (`pgflow:<slug>`) separately from host-owned
+   registrations.
+3. Record the reconciliation operation for every host-owned schedule class.
+
+After restoring the target and before resuming producers:
+
+1. Query the target independently. **Never conclude “nothing to restore” from
+   an empty target `cron.job`; compare it with the source inventory and
+   canonical host configuration.**
+2. Restore PgFlow-owned registrations from saved schedule state or reviewed
+   scheduling SQL generated from the matching flow/job definitions. Preserve
+   intentionally disabled schedules. Use a new forward migration or an explicit
+   reconciliation operation; do not rerun old definition migrations or recompile
+   entire flows merely to restore cron rows.
+3. Run the host application's idempotent schedule reconciliation after Ecto
+   migrations. A one-time migration alone is insufficient because its
+   `schema_migrations` row may also have been restored.
+4. Compare exact job names, schedules, commands, active state, database, and
+   owner. Confirm expected source rows have one matching cron registration and
+   inspect `cron.job_run_details` after the first due execution.
+5. Verify the reconciliation itself did not enqueue or execute business work;
+   catch-up task execution is a separate explicitly approved operation.
+
+The release path should invoke host reconciliation after migrations on every
+deploy. This makes a restored database self-repairing even when no Ecto
+migration is pending.
