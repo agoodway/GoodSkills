@@ -15,7 +15,14 @@ The durable identity is `(queue_name, message_id)`, not `message_id`. Flow slugs
 
 Stalled-task recovery is supervised and defaults to a 15-second sweep. A task is eligible only when task, step, and run are all `started` and the effective timeout plus stale threshold elapsed. Recovery uses `FOR UPDATE SKIP LOCKED`, preserves attempt count, increments `requeued_count`, clears ownership/start time, and resets visibility on the persisted queue.
 
-After three requeues, the next sweep archives the message and records `permanently_stalled_at`; it does not terminalize the task/run. Alert on these rows.
+With helpers V05, after three requeues the next sweep archives the message and
+records `permanently_stalled_at`; the task and run remain `started`. With helpers
+V06, the recovery process then calls `pgflow.escalate_permanently_stalled()` as
+a separate query. Escalation locks the run, step, then task; raises the task's
+attempt count to the effective maximum; and calls `fail_task`, so the step's
+`when_exhausted` policy terminalizes the task and resolves dependents. Do not
+call escalation inside a transaction that holds recovery's task-row locks.
+Alert on stamped tasks whose run remains `started` after escalation.
 
 ## Pruning and deletion
 

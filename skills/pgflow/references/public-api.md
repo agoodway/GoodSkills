@@ -56,3 +56,15 @@ PgFlow.Metrics.overview(MyApp.Repo)
 Worker health is heartbeat-derived: healthy under 30 seconds, stale through 60 seconds, then dead; stopped/deprecated workers are dead. `PgFlow.Workers.delete/2` deletes only the worker row and clears task attribution via the foreign key—it does not stop a live worker. Use `PgFlow.stop_worker/1` for an operator stop.
 
 Use raw SQL only for objects not exposed here (migration preflight, exact function signatures, pgmq internals). Validate identifiers and summarize results rather than exposing raw rows.
+
+## SQL progress read model (helpers V06)
+
+`pgflow.step_progress` exposes one row per `(run_id, step_slug)` for host SQL
+consumers such as GraphQL subscriptions. Its columns are `run_id`, `flow_slug`,
+`run_status`, `run_input`, `run_started_at`, `run_completed_at`, `run_failed_at`,
+`step_slug`, `step_status`, `skip_reason`, `step_output`, `step_started_at`,
+`step_completed_at`, `step_failed_at`, and `step_skipped_at`.
+
+The view includes complete run input and step output. Expose only authorized
+fields through an application view. For Elixir callers, continue using
+`PgFlow.Runs` and `PgFlow.Context` rather than querying pgflow tables.

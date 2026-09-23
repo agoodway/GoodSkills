@@ -1,6 +1,6 @@
 # Upgrade PgFlow schema
 
-Use this for an existing installation when a dependency adds a core or helpers migration. For the upstream-alignment release, the target contract is core V02 + helpers V05 at upstream SHA `94490709f79ebf366141dd925b047f0c1013e759`; do not call that published npm `0.17.0` compatibility.
+Use this for an existing installation when a dependency adds a core or helpers migration. PgFlow 0.4.0 aligned with upstream SHA `94490709f79ebf366141dd925b047f0c1013e759` at core V02 + helpers V05; do not call that published npm `0.17.0` compatibility. PgFlow 0.5.0 keeps core V02 and adds helpers V06.
 
 ## Coordinated procedure
 
@@ -10,7 +10,10 @@ There is no mixed-version rolling upgrade.
 2. Pause producers and cron; drain in-flight handlers without emptying queues.
 3. Stop OTP workers plus recovery, pruning, and definition writers.
 4. Run preflight checks for case-insensitive slug collisions, slugs longer than 47 characters, and duplicate `(lower(flow_slug), message_id)` pairs.
-5. Generate a new wrapper and apply it:
+5. Apply through the host application's migration manager. For Hasura, create
+   the migration with its CLI and assemble the installed package's versioned
+   SQL there; do not run Ecto migrations. For Ecto-managed applications,
+   generate a new wrapper and apply it:
 
    ```bash
    mix pgflow.setup --upgrade --repo MyApp.Repo
@@ -20,13 +23,17 @@ There is no mixed-version rolling upgrade.
 
 6. Verify queue backfill/counts, deploy matching Elixir and pinned TypeScript callers, restore maintenance and exact worker state, then resume producers.
 
-The wrapper must call `PgFlow.Migration.up()` then `PgFlow.HelpersMigration.up()` in one normal Ecto transaction. Do not add `@disable_ddl_transaction true`. Its down path is forward-only; restore the coordinated backup after a successful migration if rollback is required.
+The Ecto wrapper must call `PgFlow.Migration.up()` then `PgFlow.HelpersMigration.up()` in one normal Ecto transaction. Do not add `@disable_ddl_transaction true`. Its down path is forward-only; restore the coordinated backup after a successful migration if rollback is required.
 
 ## Operational risk
 
 Core V02 rewrites `step_tasks`, scans constraints, creates a non-concurrent unique index, and holds an `ACCESS EXCLUSIVE` lock through the transaction. Measure table/index size, disk, WAL capacity, long transactions, and vacuum needs on a restored copy. The lock timeout bounds acquisition, not migration duration.
 
 Never rerun an old setup wrapper. Use `mix pgflow.stamp` only after proving an untracked legacy schema exactly matches the expected baseline; stamping drift makes later migrations unsafe.
+
+For `flow_shape_mismatch`, compare the ordered stored steps with the code.
+Restore matching code or introduce a new flow slug for the changed shape.
+Do not rewrite `step_index` to make the check pass.
 
 Production shape mismatch preserves history. Destructive recompilation is controlled by the database `app.settings.jwt_secret` GUC matching the Supabase local default—not by `MIX_ENV`. Never set that GUC on a history-bearing database.
 
@@ -69,3 +76,25 @@ After restoring the target and before resuming producers:
 The release path should invoke host reconciliation after migrations on every
 deploy. This makes a restored database self-repairing even when no Ecto
 migration is pending.
+
+## Helpers V05 to V06
+
+V06 adds `pgflow.escalate_permanently_stalled()` and `pgflow.step_progress`.
+Hex pgflow 0.4.0 stops at helpers V05; Hex pgflow 0.5.0 bundles V06. A
+dependency bump alone does not apply its SQL.
+Install the V06 helper SQL through the host's migration manager while workers
+and recovery are stopped. Run the one-time escalation pass only after the V06
+function is installed; it terminalizes tasks that V05 stamped and left started.
+Set the helpers version comment to `PgFlow version=6`, then run
+`mix pgflow.check_schema --repo MyApp.Repo` before resuming workers. V06 worker
+bootstrap rejects a V05 helpers schema. The one-time SQL pass is:
+
+```sql
+SELECT pgflow.escalate_permanently_stalled();
+```
+
+The recovery query and escalation query must commit separately. Recovery locks
+task rows first; `fail_task` locks run and step rows first. Combining them in
+one transaction creates a deadlock path with live workers. Hosts that use
+Hasura or another migration manager should assemble the versioned SQL into
+that manager's migration instead of running `mix ecto.migrate`.

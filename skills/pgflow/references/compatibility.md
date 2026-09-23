@@ -19,6 +19,11 @@ Run migration tests separately because they mutate the shared test schema. Witho
 
 The schema gate checks core/helpers version floors, required tables and pgmq, sole four-argument `start_tasks(text,bigint[],uuid,text)`, absence of the legacy three-argument claim, `ensure_flow_compiled(text,jsonb)`, queue constraints, task statuses, and the eight-field `step_task_record` with `attempts_count`. Worker bootstrap checks a narrower runtime-critical subset; it does not replace this gate.
 
+For a V06 library build, the helpers floor is 6 at both the CLI gate and
+worker bootstrap. Verify `pgflow.escalate_permanently_stalled()` and the
+15-column `pgflow.step_progress` view after the migration. V05 consumers must
+not assume a permanently stalled task or run becomes terminal.
+
 ## Upstream harness
 
 Run only against a disposable database with the permitted test prefix:

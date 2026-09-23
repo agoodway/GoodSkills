@@ -33,8 +33,8 @@ For `/pgflow help` or an unknown/missing subcommand, list: `bootstrap`, `upgrade
 ## Non-negotiable safety rules
 
 - Treat logical flow identity and physical queue identity separately. Queue operations use persisted `(queue_name, message_id)`; current default queue routes are lowercase flow slugs.
-- Do not overlap old and new workers during a core V02/helpers V05 upgrade. Pause producers, drain, stop all writers, migrate core then helpers in one transaction, verify, and deploy matching callers.
-- Do not expect an applied setup migration to rerun after a dependency bump. Generate a new `mix pgflow.setup --upgrade` wrapper.
+- Do not overlap old and new workers during a schema upgrade. Pause producers, drain, stop all writers, apply the new schema version, verify, and deploy matching callers.
+- Do not expect an applied setup migration to rerun after a dependency bump. Use the host's migration manager; in Ecto-managed applications, generate a new `mix pgflow.setup --upgrade` wrapper.
 - When an upgrade also moves/restores the database, a green PgFlow schema does not prove recurring schedules survived. Inventory cron state on the source and reconcile host-owned schedules on the target from canonical application configuration.
 - Run `mix pgflow.check_schema`; worker bootstrap checks only the runtime-critical subset. A ready starter can still have permanently failed modules.
 - Never use runtime destructive recompilation or `mix pgflow.stamp` without proving the database contract and history implications.
