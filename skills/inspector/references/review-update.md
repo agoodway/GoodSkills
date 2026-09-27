@@ -27,9 +27,9 @@
 ## Modes (summary)
 
 - **`ask`** — auto-patch mechanical findings; ask one design question at a time.
-- **`auto`** — auto-patch mechanical findings; for design questions, apply the model's recommended option and record rationale. Skip only when product intent is truly unknowable.
+- **`auto` (default)** — auto-patch mechanical findings; for design questions, apply the model's recommended option and record rationale. Skip only when product intent is truly unknowable.
 
-If mode is omitted, the standalone skill asks which mode to use.
+If mode is omitted, the standalone skill uses `--auto`.
 
 ## Install
 

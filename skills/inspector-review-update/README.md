@@ -32,6 +32,6 @@ Run it in the app repo that contains `openspec/changes/`. If `change-id` is omit
 
 | Flag | Behavior |
 |------|----------|
+| `--auto` | Default. Auto-patch mechanical findings. Apply the recommended answer for each design question and record the rationale. |
 | `--ask` | Auto-patch mechanical findings. Ask one design question at a time, then apply your answer. |
-| `--auto` | Auto-patch mechanical findings. Apply the recommended answer for each design question and record the rationale. |
-| (omitted) | Ask which mode to use before reviewing. `--auto` still asks which change to use when none was given. |
+| (omitted) | Same as `--auto`. A missing change-id is still chosen by you. |

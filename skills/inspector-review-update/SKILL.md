@@ -37,20 +37,12 @@ Legacy entry point: `/inspector review-update …` should load and follow this s
 
 | Mode | Behavior |
 |------|----------|
+| **`auto` (default)** | Auto-patch mechanical findings. For each design-decision finding, pick the **recommended** option, apply it, and record the rationale — no user prompts for those questions. |
 | **`ask`** | Auto-patch mechanical findings. For each design-decision finding, ask the user one question at a time, then apply the fix from their answer. |
-| **`auto`** | Auto-patch mechanical findings. For each design-decision finding, pick the **recommended** option, apply it, and record the rationale — no user prompts for those questions. |
 
-If the user already specified a mode (flag or natural language), use it.
+If the user specified a mode (flag or natural language), use it. If mode is omitted, use **`auto`**.
 
-If mode is **not** specified:
-
-1. Prefer the runtime question tool when available; otherwise ask in chat.
-2. Present exactly these options (safer default first):
-   - **Ask me (default)** — you answer each design question
-   - **Decide for me** — model applies its recommended answers and records rationale
-3. Do not start the specialist review until a mode is chosen.
-
-In `auto` mode, still ask the user which **change-id** to use when none was provided. Only design-decision questions are auto-answered.
+Only design-decision questions are auto-answered. A missing change-id is still resolved per [Inputs](#inputs).
 
 ## Inputs
 
