@@ -33,6 +33,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `skills/horde/SKILL.md`: set up Horde distributed process infrastructure (registry, supervisor, cluster monitor)
 - `skills/openapi/SKILL.md`: regenerate OpenAPI specs in Phoenix apps using open_api_spex
 - `skills/pgflow/SKILL.md`: PgFlow PostgreSQL-based workflow engine for Elixir/Phoenix
+- `skills/tango/SKILL.md`: add per-tenant OAuth connections to third-party APIs using Tango
 
 ### CLI Tool Skills
 
