@@ -1,13 +1,13 @@
 ---
 name: tango
-description: "Use when installing, configuring, upgrading, or debugging Tango in Elixir/Phoenix: the `:tango` dep, `mix tango.*` tasks, Nango catalog providers, per-tenant OAuth connections to third-party APIs, or invoking `/tango`. Not for user sign-in (Ueberauth, phx.gen.auth) or OAuth servers (Boruta)."
+description: "Use when installing, configuring, upgrading, testing, or debugging Tango OAuth connections in Elixir/Phoenix, including refresh failures, tenant-scoped connection info, generation locks, or /tango requests. Not for user sign-in or OAuth servers."
 ---
 
 # Tango
 
-Tango is an OAuth client library for Phoenix: provider configs from the Nango catalog, PKCE sessions, AES-GCM encrypted tokens in the host Ecto repo, and per-tenant connections. Version 0.2.0 adds credential-free popup completion (schema V03).
+Tango stores per-tenant OAuth connections in the host Ecto repo. Version 0.3.0 adds typed refresh errors, credential-free connection info, public generation locks, id-based revoke, and test fixtures. Both 0.2.0 and 0.3.0 use schema V03.
 
-Inspect the consumer's installed Tango version before writing code (`mix.lock`, `deps/tango/mix.exs`). Path/git checkouts can expose APIs the published Hex package lacks; 0.1.x has no `create_authorization_session/3`, `verify_authorization/4`, `multi_finalize_authorization/5`, or `allowed_completion_origins`. When `deps/tango/docs/` and `deps/tango/lib/` disagree, follow `lib/`.
+Inspect `mix.exs`, `mix.lock`, and the resolved Tango source before writing code. A local 0.3.0 version does not prove Hex publication; path dependencies have no Hex lock entry. Use the installed implementation when docs disagree. The 0.3 APIs below do not compile against 0.2.0; authorization completion requires 0.2.0 or later.
 
 ## Route the request
 
@@ -22,28 +22,22 @@ Read only the references needed for the request:
 | Mount the HTTP router, CORS, API key             | [references/api.md](references/api.md)                                                          |
 | LiveView connect button                          | [references/liveview.md](references/liveview.md), then [references/authorization.md](references/authorization.md) |
 | Use, refresh, revoke, report auth failures       | [references/connections.md](references/connections.md)                                          |
-| Upgrade schema or migrate a legacy popup callback | [references/upgrading.md](references/upgrading.md)                                              |
+| Classify refresh errors, backoff, safe reporting | [references/refresh-errors.md](references/refresh-errors.md)                                     |
+| Consumer test fixtures                          | [references/testing.md](references/testing.md)                                                   |
+| Upgrade 0.2 to 0.3, schema, or legacy callbacks   | [references/upgrading.md](references/upgrading.md)                                               |
 | Debug errors                                     | [references/debug.md](references/debug.md)                                                      |
 
-For `/tango help` or an unknown/missing subcommand, list: `bootstrap`, `providers`, `flow`, `authorization`, `api`, `liveview`, `connections`, `upgrade`, `debug`, and `help`. `flow` maps to [references/direct-flow.md](references/direct-flow.md). Then follow the matching reference.
+For `/tango help` or an unknown/missing subcommand, list: `bootstrap`, `providers`, `flow`, `authorization`, `api`, `liveview`, `connections`, `testing`, `upgrade`, `debug`, and `help`. `flow` maps to [references/direct-flow.md](references/direct-flow.md).
 
-Choose the flow before writing code: a browser popup connect button uses authorization completion ([references/authorization.md](references/authorization.md)); a server that receives the provider redirect itself uses the direct flow ([references/direct-flow.md](references/direct-flow.md)). The two session kinds are not interchangeable.
+## Safety boundaries
 
-## Non-negotiable safety rules
-
-- Keep tokens server-side. Never put access/refresh tokens, provider bodies, authorization codes, raw `state`, or completion handles into browser responses, `postMessage` payloads, rendered assigns, job args, logs, telemetry, or error reports. Persist only `connection.id` and the identity summary in host tables; read credentials at call time with `Tango.get_active_connection/3`.
-- Take the tenant from the authenticated server session (`conn.assigns`, `socket.assigns`), never from browser input, query params, or the `on_connect` message, and pass it to every tenant-scoped call. Tenant IDs match `^[a-zA-Z0-9_-]+$` and are at most 255 bytes.
-- Never ship `TANGO_API_KEY` to the browser. `Tango.API.Router` trusts the `X-Tenant-ID` header over `conn.assigns.current_tenant_id`, so anyone holding the key chooses the tenant. Call key-protected routes from server code only.
-- Never `inspect`, log, or return in an error tuple a loaded `%Tango.Schemas.Connection{}` or `%Tango.Schemas.Authorization{}`: decrypted tokens are plain struct fields and the schemas do not redact `Inspect`. Never write Tango token columns with host `Repo` calls; Tango's own writes route them through `Tango.RedactedParams` so query logs and telemetry never see them.
-- `config :tango, encryption_key:` comes from runtime secrets (32 raw bytes or base64 of 32 bytes), never committed. Rotating it makes every stored token and client secret unreadable.
-- List every page origin in `config :tango, allowed_completion_origins: [...]` as an exact `scheme://host[:port]`: no trailing slash, path, or wildcard; `https` except `localhost`/`127.0.0.1`/`::1`. The callback posts nothing to an unlisted origin.
-- In the opener page, accept a callback `message` only when `event.source` is the popup you opened, `event.origin` equals the origin serving `/callback`, and `intent_reference` matches the pending intent. The `TangoOAuth` hook does this; hand-written listeners must too.
-- `state` is opaque and tenant-encoded: never build, parse, or log it. `redirect_uri` is bound at session creation and must equal, byte for byte, the URL registered with the provider; the direct flow's `exchange_code/4` must pass the same value.
-- Verification and finalization are server-only. The verifier module and its options come from server code, never the browser. A verifier returns a stable subject and a small identity-claims allowlist, never tokens or raw payloads. Return `{:error, :network_error | :timeout | :temporarily_unavailable | :provider_unavailable}` for retryable failures; any other verifier error consumes the single-use completion handle.
-- Run `Tango.multi_finalize_authorization/5` inside a Multi committed by the Repo in `config :tango, repo:`; any other Repo returns `{:error, :repo_mismatch}`. Link host records in the same Multi so the connection and app rows commit together.
-- `mix tango.setup` is for the initial install only; its `down` drops every Tango table. Upgrade with a separate host migration pinning `Tango.Migration.up(version: N)` / `down(version: N - 1)`, applied before deploying code that needs it.
-- Tango schedules nothing. Run `Tango.cleanup_expired_authorizations/0` before `Tango.cleanup_expired_sessions/0` from the host job runner.
-- Report only real credential rejections (`401`, or a `403` whose body confirms an invalid/revoked token) with `Tango.record_auth_failure/3`. Do not blanket-report 403 scope, policy, or quota denials; repeated reports expire the connection.
-- Do not invent Tango APIs. If a function is not in the installed `lib/tango/tango.ex` (or the module the reference names), say so instead of guessing.
+- Take tenant ids from the authenticated server session, never browser input. Locking does not authorize access. Tenant ids match `^[a-zA-Z0-9_-]+$`, at most 255 bytes.
+- Keep credentials server-side. Do not log loaded connection/authorization structs, provider bodies, codes, raw state, completion handles, or credential-bearing changesets. Persist connection ids and selected identity fields in host records; fetch tokens only for provider calls.
+- Use connection-info reads for status/identity and `Tango.Testing` for ordinary test inserts. Host token writes bypass Tango's query/telemetry redaction.
+- Use `RefreshError.classify/1` for decisions and `to_storage/1` for reporting. Outages and database failures do not prove revoked consent. Only genuine resource API credential rejections belong in `record_auth_failure/3`.
+- Keep encryption/API keys in runtime secrets. Key rotation makes stored credentials unreadable. Never give the browser `TANGO_API_KEY`: the HTTP router trusts its caller's tenant header.
+- For popup work, follow [authorization.md](references/authorization.md): exact allowed origins, popup source/origin/intent checks, server-owned verifier, tenant-scoped completion, and finalization on Tango's configured Repo. Direct and staged sessions are not interchangeable.
+- `mix tango.setup` is initial installation only. Add pinned migrations only for schema advances; 0.2 to 0.3 stays V03. Tango schedules nothing; host cleanup runs authorizations before sessions.
+- Verify APIs against installed source. Preserve the requested dependency source and distinguish local validation from published adoption. See [upgrading.md](references/upgrading.md) before release/dependency changes.
 
 $ARGUMENTS

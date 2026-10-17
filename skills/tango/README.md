@@ -32,6 +32,7 @@ npx skills add agoodway/GoodSkills --skill tango
 | `authorization` | Popup completion: verifier, `multi_finalize_authorization`, cleanup               |
 | `api`           | Mount `Tango.API.Router` with API key, tenant, and CORS settings                  |
 | `liveview`      | Add `Tango.Live.OAuthComponent` and the `TangoOAuth` JS hook                      |
-| `connections`   | Read, refresh, revoke connections and report provider auth failures               |
-| `upgrade`       | Pinned schema upgrades and migrating a legacy popup callback                      |
+| `connections`   | Credential-free info, generation locks, refresh policy and tenant-scoped revoke   |
+| `testing`       | Consumer provider/connection fixtures with explicit nullable fields              |
+| `upgrade`       | 0.2 to 0.3 adoption, release gates, schema and legacy callback upgrades            |
 | `debug`         | Diagnose error atoms, origin/repo mismatches, and missing callbacks               |

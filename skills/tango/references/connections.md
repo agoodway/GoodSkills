@@ -4,35 +4,31 @@ A `Tango.Schemas.Connection` holds a tenant's encrypted tokens for one provider.
 
 Useful fields: `id`, `tenant_id`, `provider_id`, `account_subject`, `status` (`:active | :revoked | :expired`), `expires_at`, `granted_scopes`, `token_type`, `last_used_at`, `auth_failures`, `refresh_exhausted`.
 
-## Read
+## Credential-free reads (0.3.0)
 
-By ID (preferred after authorization completion, since host tables store `connection.id`):
-
-```elixir
-case Tango.get_active_connection(connection_id, tenant_id, auto_refresh: true) do
-  {:ok, connection} -> call_provider(connection)
-  {:error, :not_found} -> {:error, :reconnect_required}
-  {:error, {:refresh_failed, _reason}} -> {:error, :reconnect_required}
-end
-```
-
-By provider slug (latest active connection for the tenant):
+Use these for status, account subject, and ids:
 
 ```elixir
-{:ok, connection} = Tango.get_connection_for_provider("github", tenant_id)
-{:ok, connection} = Tango.get_connection_for_provider("github", tenant_id, auto_refresh: true)
+{:ok, info} = Tango.get_connection_info(connection_id, tenant_id)
+infos = Tango.list_connection_infos(tenant_id, provider_slug: "records", status: :any)
 ```
 
-List a tenant's active connections:
+`%Tango.ConnectionInfo{}` has exactly `id`, `tenant_id`, `provider_slug`, `status`, `account_subject`, `granted_scopes`, and `expires_at`. Subject, scopes and expiry may be nil. No provider id, config, metadata, retry counters, credentials, or raw payload are selected. There is no automatic JSON encoder; explicitly choose presentation fields.
+
+The id read includes every status; missing and wrong-tenant ids return `{:error, :not_found}`. Listing defaults to active, accepts `:active | :expired | :revoked | :any` or a list of statuses, and sorts ascending by id. Empty status lists and unknown slugs return `[]`. Invalid options raise `ArgumentError`. Both include inactive providers, never refresh or lock, and make no guarantee that an active token is usable or unchanged.
+
+## Credential reads for provider calls
 
 ```elixir
-connections = Tango.list_connections(tenant_id)
-connections = Tango.list_connections(tenant_id, provider: "GitHub", preload: false)
+Tango.get_active_connection(connection_id, tenant_id, auto_refresh: true)
+Tango.get_connection_for_provider("records", tenant_id, auto_refresh: true)
 ```
 
-The `:provider` filter matches the provider's `name` (display name such as `"GitHub"`), not its slug. Filter by slug in Elixir (`connection.provider.slug`) when unsure of the stored name. `preload` defaults to `true`.
+Prefer the exact connection id pinned in host records. The provider getter returns the latest active connection. Handle refresh failures using [refresh-errors.md](refresh-errors.md); a provider outage must not automatically request reauthorization.
 
-`auto_refresh: true` refreshes when the token expires within five minutes. Refresh is row-locked, so concurrent callers reuse one refresh. A failed refresh still returns a still-valid token, but an expired one becomes `{:error, {:refresh_failed, reason}}`. A refresh that succeeds is kept even if writing its audit log fails (the error is logged). With `auto_refresh: false` (the default) the read takes no lock and returns the last committed row even while a refresh is in flight.
+`auto_refresh: true` refreshes within five minutes of expiry, under generation and row locks. Fallback requires an active, still-valid token and a non-credential/non-persistence/non-transaction error. Default `auto_refresh: false` returns the last committed row without waiting for an in-flight refresh.
+
+Legacy `Tango.get_connection/2` and `Tango.list_connections/2` still return credentials. The legacy list's `provider:` filter matches display **name**, not slug; it preloads providers by default. Use connection-info APIs for ordinary status/identity reads instead of host queries against Tango schemas.
 
 ## Call a provider
 
@@ -83,15 +79,39 @@ Tango.record_auth_failure(connection_id, "http_401", tenant_id: tenant_id, max_f
 {:ok, count} = Tango.refresh_expiring_connections()        # batch; size from :refresh_batch_size
 ```
 
-`refresh_connection/1` reports a provider failure as `{:error, reason}` even while the current access token is still valid (`:no_refresh_token` and `:refresh_not_allowed` when the connection is not refreshable). Three consecutive refresh failures set `refresh_exhausted` and expire the connection. `refresh_expiring_connections/0` is not scheduled by Tango. Run it from the host job runner if proactive refresh is wanted; otherwise rely on `auto_refresh: true` at call time.
+Explicit refresh returns a bare `{:error, reason}`; on-demand returns the refresh-failed envelope unless fallback applies. Credential, client/request, transient and local failures have different policies: see [refresh-errors.md](refresh-errors.md). Tango schedules nothing; the host owns any proactive sweep job.
+
+## Generation locks (0.3.0)
+
+```elixir
+MyApp.Repo.transaction(fn ->
+  with :ok <- Tango.lock_connection_generations(tenant_id, ["beta", "alpha"]),
+       {:ok, connection} <- Tango.revoke_connection(connection_id, tenant_id) do
+    connection.id
+  else
+    {:error, reason} -> MyApp.Repo.rollback(reason)
+  end
+end)
+```
+
+Use the Repo configured for Tango, in the calling process. Validate host authorization separately. The lock function validates options first, then checks `in_transaction?()`, returning `{:error, :not_in_transaction}` before provider lookup when outside a transaction. Even `[]` requires the transaction; inside it returns `:ok`.
+
+Providers are resolved together, including inactive ones. Default `missing: :error` returns `{:error, {:provider_not_found, slug}}` for the first absent slug in input order **without taking any locks**. `missing: :skip` ignores absent slugs; invalid options raise `ArgumentError`. If the host requires an active provider, check that requirement before acquiring the full batch.
+
+Tango sorts/deduplicates by `{provider_id, tenant_id}` in Elixir term order, using its existing advisory-lock namespace. Slug order is irrelevant. Acquire the full provider set before nested Tango calls. Locks last until the outer transaction ends; reacquiring held keys is safe, adding a lower key later can deadlock. There is no guarantee for arbitrary cross-tenant lock composition. Locks establish neither authorization nor connection status.
 
 ## Revoke
 
 ```elixir
-{:ok, revoked} = Tango.revoke_connection(connection, tenant_id)
+Tango.revoke_connection(connection_id, tenant_id) # integer id; 0.3.0+
+Tango.revoke_connection(connection, tenant_id)    # existing struct overload
 ```
 
-The tenant must match the connection's tenant or the call returns `{:error, :not_authorized}`. Both `:active` and `:expired` connections can be revoked; an already revoked one returns `{:error, :not_found}`. Revocation marks the row `:revoked` and writes an audit entry. It does not call the provider's revocation endpoint; do that separately if the provider supports it and the product needs it.
+The id overload returns `{:error, :not_found}` for missing, wrong-tenant and already-revoked rows. A struct tenant mismatch remains `{:error, :not_authorized}`. Active and expired generations can be revoked. Routing is tenant-scoped and state is rechecked under generation/row locks. Failed revoke audit rolls back revocation; this differs from best-effort refresh-success auditing.
+
+When terminal/missing generations should be a no-op inside a larger transaction, precheck `get_connection_info/2` while holding the generation lock and call revoke only for active/expired rows. Do not assume a failing nested transaction leaves its caller usable.
+
+Revocation does not call the provider's revocation endpoint; perform that separately only when the host workflow requires it.
 
 Bulk revocation lives on `Tango.Connection` (not delegated from `Tango`). Both cover `:active` and `:expired` rows and return `{:ok, revoked_count}`:
 

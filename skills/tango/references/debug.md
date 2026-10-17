@@ -4,7 +4,7 @@ Diagnose read-only first. Do not delete Tango rows, reset counters by SQL, or re
 
 ## Gather facts
 
-1. Installed version: `grep '"tango"' mix.lock` and `deps/tango/mix.exs`.
+1. Installed version: `rg '"tango"' mix.lock` and `deps/tango/mix.exs`.
 2. Schema version: `SELECT obj_description('public.tango_providers'::regclass);` (adjust the prefix).
 3. Config at runtime (`iex -S mix` or a remote console). Print presence, not secrets:
 
@@ -16,7 +16,7 @@ is_binary(Application.get_env(:tango, :encryption_key))
 Tango.list_providers() |> Enum.map(& &1.slug)
 ```
 
-4. The exact error tuple returned to host code. Error atoms are stable and safe to log; tokens, codes, `state`, and handles are not.
+4. Identify the failing operation and bounded error. For 0.3 refresh failures, log `Tango.RefreshError.to_storage(reason)`; never dump arbitrary nested reasons, raw provider bodies, tokens, codes, state, or handles.
 
 ## Symptom → cause
 
@@ -44,7 +44,7 @@ Tango.list_providers() |> Enum.map(& &1.slug)
 | `{:error, :repo_mismatch}`                                               | Multi committed via a different Repo (read replica, second repo, dynamic repo). Use the repo in `config :tango, repo:`.                                     |
 | `{:error, :client_changed}`                                              | At finalize: either the provider client ID changed since the session started (restart the flow), or `require_refresh_token: true` was used to reauthorize a connection that has a refresh token but no recorded `oauth_client_id` (pre-V03 or `exchange_code/4`); drop `require_refresh_token` or revoke and connect fresh. The callback can also post `oauth_error` `"client_changed"`. |
 | `{:error, {:oauth_error, category}}`                                     | Sanitized provider failure (denied consent, bad code, bad client secret). Check provider app config; the raw body is intentionally not returned.            |
-| `{:error, {:refresh_failed, reason}}`                                    | Token expired and refresh failed or is not allowed (`:no_refresh_token`, `:refresh_not_allowed`, `"http_4xx:..."`). Prompt reauthorization.                 |
+| `{:error, {:refresh_failed, reason}}`                                    | In 0.3, classify the typed reason using [refresh-errors.md](refresh-errors.md). Credential failure requires reauthorization; HTTP outages and persistence/transaction failures do not. Legacy strings are not credential proof.                 |
 | `{:error, :not_found}` for a connection that existed                     | Connection revoked or expired by `record_auth_failure/3` reaching `max_failures`. Check `status` and `last_auth_failure`.                                   |
 | 401 from `Tango.API.Router`                                              | `api_key` unset, or request lacks `Authorization: Bearer` / `X-API-Key`. `/callback` and `/health` need no key.                                            |
 | LiveView crashes with `FunctionClauseError` in `handle_info/2`           | Missing `{:tango_log, _}` or `on_error` clause.                                                                                                            |
@@ -52,7 +52,7 @@ Tango.list_providers() |> Enum.map(& &1.slug)
 
 ## Inspect rows safely
 
-Select only non-secret columns. Never `SELECT *` from `tango_connections` or `tango_authorizations` into logs or chat.
+On 0.3 use `Tango.get_connection_info(id, tenant_id)` or `Tango.list_connection_infos(tenant_id, status: :any)` for status/identity. These include inactive providers without fetching credentials or refreshing tokens. For retry-state diagnosis not exposed by info, select only non-secret columns. Never `SELECT *` from `tango_connections` or `tango_authorizations` into logs or chat.
 
 ```sql
 SELECT id, tenant_id, provider_id, status, account_subject, expires_at,

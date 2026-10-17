@@ -1,6 +1,6 @@
 # Bootstrap Tango
 
-Add Tango to an existing Phoenix application. Check what is already installed first; if `deps/tango` exists, use its version and `deps/tango/docs/` rather than assuming 0.2.0.
+Add Tango to an existing Phoenix application. Check what is already installed first; if `deps/tango` exists, use its version and `deps/tango/docs/` rather than assuming a release.
 
 ## Prerequisites
 
@@ -9,12 +9,12 @@ Add Tango to an existing Phoenix application. Check what is already installed fi
 
 ## Install
 
-Add the requested released, git, or path dependency. Do not silently replace a requested path/git build with the Hex release.
+Add the requested released, git, or path dependency. Verify Hex availability before choosing 0.3.0; a local 0.3.0 checkout may be unpublished. The example below is for a verified published 0.3.0. For provisional local adoption, follow [upgrading.md](upgrading.md) and preserve the requested source.
 
 ```elixir
 def deps do
   [
-    {:tango, "~> 0.2.0"}
+    {:tango, "~> 0.3.0"}
   ]
 end
 ```
@@ -79,7 +79,7 @@ defmodule MyApp.Repo.Migrations.InstallTango do
 end
 ```
 
-`up/0` installs through the latest bundled version (V03 in 0.2.0). `down/0` targets version 0 and drops every Tango table. Run setup once per database; for later versions follow [upgrading.md](upgrading.md).
+`up/0` installs through the latest bundled version (V03 in both 0.2.0 and 0.3.0). `down/0` targets version 0 and drops every Tango table. Run setup once per database; for later versions follow [upgrading.md](upgrading.md).
 
 Without Ecto migrations, copy `deps/tango/priv/repo/sql/versions/<version>/` into the host migration tool, replace `$SCHEMA$` with the prefix, and stamp the version marker:
 
