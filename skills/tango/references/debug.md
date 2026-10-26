@@ -16,7 +16,7 @@ is_binary(Application.get_env(:tango, :encryption_key))
 Tango.list_providers() |> Enum.map(& &1.slug)
 ```
 
-4. Identify the failing operation and bounded error. For 0.3 refresh failures, log `Tango.RefreshError.to_storage(reason)`; never dump arbitrary nested reasons, raw provider bodies, tokens, codes, state, or handles.
+4. Identify the failing operation and bounded error. For refresh failures (0.3.0+), log `Tango.RefreshError.to_storage(reason)`; never dump arbitrary nested reasons, raw provider bodies, tokens, codes, state, or handles.
 
 ## Symptom → cause
 
@@ -25,7 +25,15 @@ Tango.list_providers() |> Enum.map(& &1.slug)
 | `ArgumentError` "Tango encryption key not configured" / "Key must be 32 bytes..." | `encryption_key` missing or wrong size. Use `openssl rand -base64 32` and set it in runtime config.                                                   |
 | `UndefinedFunctionError` for `Tango.create_authorization_session/3`, `verify_authorization/4`, `multi_finalize_authorization/5` | Installed Tango is 0.1.x. Upgrade ([upgrading.md](upgrading.md)) or use the direct flow.                                    |
 | `UndefinedFunctionError` for `Tango.exchange_code/3`                     | Call is missing `tenant_id`. Use `Tango.exchange_code(state, code, tenant_id, redirect_uri: uri)`.                                                           |
-| Postgres "relation tango_authorizations does not exist" / missing column  | V03 migration not applied. Add the pinned upgrade migration.                                                                                                |
+| Postgres "relation tango_authorizations does not exist"                  | V03 migration not applied. Add the pinned upgrade migration ([upgrading.md](upgrading.md)).                                                                 |
+| Postgres `column ... provider_data does not exist` (42703) in callback, verify, finalize, or `cleanup_expired_authorizations/0` | 0.4 code against a V03 database. V04 is required for every 0.4 install; add `UpgradeTangoV04` and migrate. Other missing columns: compare the marker with the release table in [upgrading.md](upgrading.md). |
+| `check_constraint` error on `provider_data`                              | Host code wrote a non-object to `tango_authorizations.provider_data`. Only Tango writes that column.                                                        |
+| `{:error, :invalid_token_response}` / callback `"invalid_token_response"` | Token endpoint returned 2xx HTML, a JSON scalar, or malformed JSON (wrong `token_url`, login page, proxy). Fix the provider URL; Tango does not retry.  |
+| `{:error, :empty_access_token}` / callback `"empty_access_token"`         | 2xx empty body, or a token object without `access_token`. Check `token_url`, `body_format`, and client auth.                                                |
+| `{:oauth_error, :provider_error}` after a 3xx from the token endpoint     | Token endpoint redirected (often a wrong host or `http` URL). 3xx is treated as a provider error.                                                           |
+| `{:oauth_error, :invalid_grant_metadata}` / callback `"invalid_grant_metadata"` | Fields listed in `token_response_metadata` encode to more than 4 KiB. Trim the list ([providers.md](providers.md#token-response-metadata)).        |
+| Verifier sees `provider_data: %{}` although fields are configured        | Field absent, `null`, nested, or secret-like (skipped silently); provider imported before the option was copied (run `sync --update-metadata`); or the call is `verify_connection_identity/3`, which always passes `%{}`. |
+| `{:oauth_error, :invalid_client}` / 401 at exchange or refresh after upgrade | Provider metadata `authorization_method: "body"` now removes the Basic header, or the provider needs it. Inspect `metadata` and set `"header"`, `"body"`, or add `token_request_auth_method: "basic"`. |
 | `{:error, :provider_not_found}`                                          | No active provider with that slug. `Tango.get_provider/1`, then `mix tango.providers.create`.                                                               |
 | `{:error, :invalid_tenant_id}` / `:tenant_id_too_long`                   | Tenant must match `^[a-zA-Z0-9_-]+$`, max 255 bytes. Emails and IDs with `.`/`:` fail; use a UUID or slug.                                                  |
 | `{:error, :invalid_completion_origin}` on session start                  | `completion_origin` not exactly in `allowed_completion_origins` (trailing slash, port, `http` on non-localhost, wrong host).                                 |
@@ -44,7 +52,7 @@ Tango.list_providers() |> Enum.map(& &1.slug)
 | `{:error, :repo_mismatch}`                                               | Multi committed via a different Repo (read replica, second repo, dynamic repo). Use the repo in `config :tango, repo:`.                                     |
 | `{:error, :client_changed}`                                              | At finalize: either the provider client ID changed since the session started (restart the flow), or `require_refresh_token: true` was used to reauthorize a connection that has a refresh token but no recorded `oauth_client_id` (pre-V03 or `exchange_code/4`); drop `require_refresh_token` or revoke and connect fresh. The callback can also post `oauth_error` `"client_changed"`. |
 | `{:error, {:oauth_error, category}}`                                     | Sanitized provider failure (denied consent, bad code, bad client secret). Check provider app config; the raw body is intentionally not returned.            |
-| `{:error, {:refresh_failed, reason}}`                                    | In 0.3, classify the typed reason using [refresh-errors.md](refresh-errors.md). Credential failure requires reauthorization; HTTP outages and persistence/transaction failures do not. Legacy strings are not credential proof.                 |
+| `{:error, {:refresh_failed, reason}}`                                    | On 0.3.0+, classify the typed reason using [refresh-errors.md](refresh-errors.md). Credential failure requires reauthorization; HTTP outages and persistence/transaction failures do not. Legacy strings are not credential proof.                 |
 | `{:error, :not_found}` for a connection that existed                     | Connection revoked or expired by `record_auth_failure/3` reaching `max_failures`. Check `status` and `last_auth_failure`.                                   |
 | 401 from `Tango.API.Router`                                              | `api_key` unset, or request lacks `Authorization: Bearer` / `X-API-Key`. `/callback` and `/health` need no key.                                            |
 | LiveView crashes with `FunctionClauseError` in `handle_info/2`           | Missing `{:tango_log, _}` or `on_error` clause.                                                                                                            |
@@ -52,11 +60,12 @@ Tango.list_providers() |> Enum.map(& &1.slug)
 
 ## Inspect rows safely
 
-On 0.3 use `Tango.get_connection_info(id, tenant_id)` or `Tango.list_connection_infos(tenant_id, status: :any)` for status/identity. These include inactive providers without fetching credentials or refreshing tokens. For retry-state diagnosis not exposed by info, select only non-secret columns. Never `SELECT *` from `tango_connections` or `tango_authorizations` into logs or chat.
+On 0.3.0+ use `Tango.get_connection_info(id, tenant_id)` or `Tango.list_connection_infos(tenant_id, status: :any)` for status/identity. These include inactive providers without fetching credentials or refreshing tokens. For retry-state diagnosis not exposed by info, select only non-secret columns. Never `SELECT *` from `tango_connections` or `tango_authorizations` into logs or chat.
 
 ```sql
 SELECT id, tenant_id, provider_id, status, account_subject, expires_at,
-       auth_failures, last_auth_failure, refresh_exhausted, last_used_at
+       auth_failures, last_auth_failure, refresh_attempts, last_refresh_failure,
+       next_refresh_at, refresh_exhausted, last_used_at
 FROM tango_connections
 WHERE tenant_id = $1
 ORDER BY inserted_at DESC;

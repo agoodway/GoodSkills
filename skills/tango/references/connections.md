@@ -2,9 +2,9 @@
 
 A `Tango.Schemas.Connection` holds a tenant's encrypted tokens for one provider. Loaded structs carry decrypted `access_token` / `refresh_token` in memory; keep them inside the function that calls the provider.
 
-Useful fields: `id`, `tenant_id`, `provider_id`, `account_subject`, `status` (`:active | :revoked | :expired`), `expires_at`, `granted_scopes`, `token_type`, `last_used_at`, `auth_failures`, `refresh_exhausted`.
+Useful fields: `id`, `tenant_id`, `provider_id`, `account_subject`, `status` (`:active | :revoked | :expired`), `expires_at`, `granted_scopes`, `token_type`, `last_used_at`, `auth_failures`, `refresh_exhausted`, and the 0.3.0+ refresh state `refresh_attempts`, `last_refresh_failure` (informational string), `next_refresh_at` (sweep backoff). Connections never carry token-response `provider_data`; it lives only on staged candidates ([authorization.md](authorization.md)).
 
-## Credential-free reads (0.3.0)
+## Credential-free reads (0.3.0+)
 
 Use these for status, account subject, and ids:
 
@@ -81,7 +81,7 @@ Tango.record_auth_failure(connection_id, "http_401", tenant_id: tenant_id, max_f
 
 Explicit refresh returns a bare `{:error, reason}`; on-demand returns the refresh-failed envelope unless fallback applies. Credential, client/request, transient and local failures have different policies: see [refresh-errors.md](refresh-errors.md). Tango schedules nothing; the host owns any proactive sweep job.
 
-## Generation locks (0.3.0)
+## Generation locks (0.3.0+)
 
 ```elixir
 MyApp.Repo.transaction(fn ->

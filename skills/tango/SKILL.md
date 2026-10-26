@@ -5,9 +5,9 @@ description: "Use when installing, configuring, upgrading, testing, or debugging
 
 # Tango
 
-Tango stores per-tenant OAuth connections in the host Ecto repo. Version 0.3.0 adds typed refresh errors, credential-free connection info, public generation locks, id-based revoke, and test fixtures. Both 0.2.0 and 0.3.0 use schema V03.
+Tango stores per-tenant OAuth connections in the host Ecto repo. Some releases require a new schema version before their code runs; [references/upgrading.md](references/upgrading.md) maps each release to its schema.
 
-Inspect `mix.exs`, `mix.lock`, and the resolved Tango source before writing code. A local 0.3.0 version does not prove Hex publication; path dependencies have no Hex lock entry. Use the installed implementation when docs disagree. The 0.3 APIs below do not compile against 0.2.0; authorization completion requires 0.2.0 or later.
+Inspect `mix.exs`, `mix.lock`, the resolved Tango source, and the schema marker before writing code. A local version string does not prove Hex publication; path dependencies have no Hex lock entry. Use the installed implementation when docs disagree, and do not write calls the installed release lacks.
 
 ## Route the request
 
@@ -16,7 +16,7 @@ Read only the references needed for the request:
 | Request                                          | Reference                                                                                       |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
 | Install, configure, first migration              | [references/bootstrap.md](references/bootstrap.md)                                              |
-| Add or sync providers (Nango catalog, custom)    | [references/providers.md](references/providers.md)                                              |
+| Providers: catalog, custom, request options      | [references/providers.md](references/providers.md)                                              |
 | Server-side redirect flow (no popup)             | [references/direct-flow.md](references/direct-flow.md)                                          |
 | Popup completion, verifier, finalize, cleanup    | [references/authorization.md](references/authorization.md)                                      |
 | Mount the HTTP router, CORS, API key             | [references/api.md](references/api.md)                                                          |
@@ -24,7 +24,7 @@ Read only the references needed for the request:
 | Use, refresh, revoke, report auth failures       | [references/connections.md](references/connections.md)                                          |
 | Classify refresh errors, backoff, safe reporting | [references/refresh-errors.md](references/refresh-errors.md)                                     |
 | Consumer test fixtures                          | [references/testing.md](references/testing.md)                                                   |
-| Upgrade 0.2 to 0.3, schema, or legacy callbacks   | [references/upgrading.md](references/upgrading.md)                                               |
+| Upgrade, schema migration, rollback               | [references/upgrading.md](references/upgrading.md)                                               |
 | Debug errors                                     | [references/debug.md](references/debug.md)                                                      |
 
 For `/tango help` or an unknown/missing subcommand, list: `bootstrap`, `providers`, `flow`, `authorization`, `api`, `liveview`, `connections`, `testing`, `upgrade`, `debug`, and `help`. `flow` maps to [references/direct-flow.md](references/direct-flow.md).
@@ -37,7 +37,7 @@ For `/tango help` or an unknown/missing subcommand, list: `bootstrap`, `provider
 - Use `RefreshError.classify/1` for decisions and `to_storage/1` for reporting. Outages and database failures do not prove revoked consent. Only genuine resource API credential rejections belong in `record_auth_failure/3`.
 - Keep encryption/API keys in runtime secrets. Key rotation makes stored credentials unreadable. Never give the browser `TANGO_API_KEY`: the HTTP router trusts its caller's tenant header.
 - For popup work, follow [authorization.md](references/authorization.md): exact allowed origins, popup source/origin/intent checks, server-owned verifier, tenant-scoped completion, and finalization on Tango's configured Repo. Direct and staged sessions are not interchangeable.
-- `mix tango.setup` is initial installation only. Add pinned migrations only for schema advances; 0.2 to 0.3 stays V03. Tango schedules nothing; host cleanup runs authorizations before sessions.
+- `mix tango.setup` is initial installation only. An upgrade that advances the schema needs a pinned host migration applied before the new code serves traffic. Tango schedules nothing; host cleanup runs authorizations before sessions.
 - Verify APIs against installed source. Preserve the requested dependency source and distinguish local validation from published adoption. See [upgrading.md](references/upgrading.md) before release/dependency changes.
 
 $ARGUMENTS

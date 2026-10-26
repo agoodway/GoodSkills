@@ -1,4 +1,4 @@
-# Refresh errors and policy (0.3.0)
+# Refresh errors and policy (0.3.0+)
 
 Read this when replacing legacy string matches, handling refresh failures, or debugging an outage. Confirm the installed Tango version first.
 

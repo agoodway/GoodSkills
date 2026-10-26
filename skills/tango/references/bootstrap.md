@@ -9,12 +9,12 @@ Add Tango to an existing Phoenix application. Check what is already installed fi
 
 ## Install
 
-Add the requested released, git, or path dependency. Verify Hex availability before choosing 0.3.0; a local 0.3.0 checkout may be unpublished. The example below is for a verified published 0.3.0. For provisional local adoption, follow [upgrading.md](upgrading.md) and preserve the requested source.
+Add the requested released, git, or path dependency. Verify Hex availability before choosing 0.4.0; a local 0.4.0 checkout may be unpublished. The example below is for a verified published 0.4.0. For provisional local adoption, follow [upgrading.md](upgrading.md) and preserve the requested source.
 
 ```elixir
 def deps do
   [
-    {:tango, "~> 0.3.0"}
+    {:tango, "~> 0.4.0"}
   ]
 end
 ```
@@ -79,19 +79,19 @@ defmodule MyApp.Repo.Migrations.InstallTango do
 end
 ```
 
-`up/0` installs through the latest bundled version (V03 in both 0.2.0 and 0.3.0). `down/0` targets version 0 and drops every Tango table. Run setup once per database; for later versions follow [upgrading.md](upgrading.md).
+`up/0` installs through the latest bundled version (V03 in 0.2.0 and 0.3.0, V04 in 0.4.0; see the table in [upgrading.md](upgrading.md)). `down/0` targets version 0 and drops every Tango table. Run setup once per database; for later versions follow [upgrading.md](upgrading.md).
 
 Without Ecto migrations, copy `deps/tango/priv/repo/sql/versions/<version>/` into the host migration tool, replace `$SCHEMA$` with the prefix, and stamp the version marker:
 
 ```sql
-COMMENT ON TABLE "public".tango_providers IS 'Tango version=3';
+COMMENT ON TABLE "public".tango_providers IS 'Tango version=4';   -- the latest version applied
 ```
 
 ## Verify
 
 ```sql
 SELECT obj_description('public.tango_providers'::regclass);
--- Tango version=3
+-- Tango version=4 on 0.4.0 (3 on 0.2.0/0.3.0)
 ```
 
 Then add a provider ([providers.md](providers.md)) and run one flow end to end ([direct-flow.md](direct-flow.md) or [authorization.md](authorization.md)). Schedule cleanup now so it is not forgotten:

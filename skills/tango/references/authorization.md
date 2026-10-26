@@ -1,6 +1,6 @@
 # Authorization completion (0.2.0+)
 
-Popup connect flow where the browser never sees a credential. Requires Tango 0.2.0 and schema V03; confirm both before using these functions ([upgrading.md](upgrading.md)).
+Popup connect flow where the browser never sees a credential. Requires Tango 0.2.0 or later and the schema its release bundles; confirm both before using these functions ([upgrading.md](upgrading.md)).
 
 ## Contents
 
@@ -21,7 +21,7 @@ Popup connect flow where the browser never sees a credential. Requires Tango 0.2
 1. Server: Tango.create_authorization_session/3 binds provider, scopes, redirect URI,
    completion origin, and intent reference; Tango.Auth.authorization_url/1 builds the URL
 2. Browser opens the URL in a popup; provider redirects to Tango's GET /callback
-3. /callback exchanges the code and stores an encrypted candidate (10-minute lifetime, capped by session expiry)
+3. /callback exchanges the code and stores an encrypted candidate plus any configured token-response metadata (10-minute lifetime, capped by session expiry)
 4. /callback posts { type, completion_handle, intent_reference } to the completion origin
 5. Browser forwards the handle to an authenticated host endpoint
 6. Server: Tango.verify_authorization/4 (HTTP to provider, outside any transaction)
@@ -120,7 +120,7 @@ defmodule MyApp.Integrations.ExampleVerifier do
   @behaviour Tango.AuthorizationVerifier
 
   @impl true
-  def verify(_provider, %{access_token: access_token, granted_scopes: _scopes}, opts) do
+  def verify(_provider, %{access_token: access_token, provider_data: _provider_data}, opts) do
     case MyApp.ExampleClient.fetch_account(access_token) do
       {:ok, %{"id" => id, "display_name" => display_name}} ->
         {:ok,
@@ -156,8 +156,9 @@ defmodule MyApp.Integrations.ExampleVerifier do
 end
 ```
 
-- Callback: `verify(Tango.Schemas.Provider.t(), %{access_token:, granted_scopes:}, keyword()) :: {:ok, %{subject:, claims:, continuity:}} | {:error, atom()}`.
+- Callback: `verify(Tango.Schemas.Provider.t(), %{access_token:, granted_scopes:, provider_data:}, keyword()) :: {:ok, %{subject:, claims:, continuity:}} | {:error, atom()}`.
 - `subject` is the provider's stable account ID as a string. `continuity` is `:initial` or `{:connection, id}`; Tango sets `opts[:connection_id]` when the session expects an existing connection.
+- `provider_data` (0.4.0+) holds the scalar token-response fields the provider's `token_response_metadata` lists, for example `%{"instance_url" => "https://acme.my.salesforce.com"}` for the identity call or Slack `"team.id"` to check the expected workspace. It is `%{}` when none are configured or present ([providers.md](providers.md#token-response-metadata)). It exists only while the candidate is staged: `verify_connection_identity/3` passes `provider_data: %{}`, so a verifier shared with identity rechecks must handle the empty map.
 - Only `:network_error`, `:timeout`, `:temporarily_unavailable`, and `:provider_unavailable` leave the handle usable for a retry (map 5xx, 429, timeouts, and transport errors to them as above; adapt the `{:error, ...}` shapes to your client). Any other verifier error, a malformed result (`:invalid_claims`), or a subject/continuity mismatch (`:account_mismatch`) consumes the handle.
 - `claims` must be JSON-compatible, at most 4 KiB encoded, with no token-like keys (`access_token`, `authorization`, `cookie`, `client_secret`, ...) at any depth. Return only display-safe identity fields.
 - Never store, log, or return the access token.
@@ -272,6 +273,7 @@ All errors are atoms or `{:oauth_error, category}`; no exception or raw provider
 | `:invalid_claims`                       | Verifier returned a malformed result: missing/blank subject, claims too large, non-JSON, or token-like |
 | `"invalid_session"` (callback `oauth_error`) | Staged session expired, already claimed, or redirect URI differs. An unknown `state`, a `create_session/3` session, or an origin no longer allowed gets no `postMessage` at all |
 | `"client_changed"`, `"access_denied"`, ... (callback `oauth_error`) | Other callback failures as snake_case strings; unrecognized reasons collapse to `"callback_failed"` |
+| `"invalid_token_response"`, `"empty_access_token"`, `"invalid_grant_metadata"` (callback `oauth_error`) | Code exchange got a 2xx non-token body (HTML, JSON scalar, malformed), an empty 2xx body, or retained metadata over 4 KiB. A 3xx or a 2xx JSON `error` object posts its OAuth category instead (`"provider_error"`, `"access_denied"`, ...) |
 
 ## Cleanup
 
@@ -301,6 +303,6 @@ Both return `{:ok, deleted_count}`. Adapt to Quantum, PgFlow, or a GenServer tim
 
 ## Token retention
 
-- Tokens live only in AES-GCM encrypted columns. Candidate handles are stored as SHA-256 hashes; candidate token columns are nulled on finalize and again by cleanup.
+- Tokens live only in AES-GCM encrypted columns. Candidate handles are stored as SHA-256 hashes; candidate token columns are nulled and `provider_data` reset to `%{}` on finalize and again by cleanup.
 - The `connection` returned by finalize holds usable plaintext tokens. Persist `connection.id` and the identity summary only; never copy tokens into host tables, job args, logs, error reports, or responses.
 - Read credentials at call time with `Tango.get_active_connection(connection_id, tenant_id, auto_refresh: true)` ([connections.md](connections.md)).
