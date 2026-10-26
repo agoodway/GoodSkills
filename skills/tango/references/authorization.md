@@ -1,6 +1,6 @@
 # Authorization completion (0.2.0+)
 
-Popup connect flow where the browser never sees a credential. Requires Tango 0.2.0 or later and the schema its release bundles; confirm both before using these functions ([upgrading.md](upgrading.md)).
+Popup flow where the browser never sees a credential. Ordinary connection completion requires Tango 0.2.0+ and defaults to `completion_mode: :connection`. For one-time account links or organization administrator proofs without a durable connection, use server-selected `completion_mode: :consume` and `Tango.Authorization.multi_consume_authorization/5` ([consumption.md](consumption.md)); this requires verified 0.4.1 source and revised V04. Confirm installed APIs and schema before use ([upgrading.md](upgrading.md)).
 
 ## Contents
 
@@ -25,10 +25,11 @@ Popup connect flow where the browser never sees a credential. Requires Tango 0.2
 4. /callback posts { type, completion_handle, intent_reference } to the completion origin
 5. Browser forwards the handle to an authenticated host endpoint
 6. Server: Tango.verify_authorization/4 (HTTP to provider, outside any transaction)
-7. Server: Tango.multi_finalize_authorization/5 inside the host Ecto.Multi
+7. Server: Tango.multi_finalize_authorization/5 inside the host Ecto.Multi for a connection
+   OR Tango.Authorization.multi_consume_authorization/5 for a consume-mode proof
 ```
 
-The `redirect_uri` must be registered with the provider and routed to the mounted `Tango.API.Router` `/callback` ([api.md](api.md)). The LiveView component performs steps 1, 2, and 5 for you ([liveview.md](liveview.md)); steps 6–7 are always host code.
+The `redirect_uri` must be registered with the provider and routed to the mounted `Tango.API.Router` `/callback` ([api.md](api.md)). For connection completion, the LiveView component performs steps 1, 2, and 5 for you ([liveview.md](liveview.md)); steps 6-7 are always host code.
 
 ## 1. Configure exact origins
 
@@ -64,17 +65,18 @@ intent_reference = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: f
 
 `Tango.Auth.authorization_url/1` is not delegated from `Tango`; call it on `Tango.Auth`.
 
-| Option                                       | Notes                                                                                                                    |
-|----------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| `:redirect_uri`                              | Required. Tango `/callback` URL registered with the provider.                                                            |
-| `:completion_origin`                         | Required. Must be in `allowed_completion_origins`.                                                                       |
-| `:intent_reference`                          | Required. Opaque string, 1–255 bytes. Ties the completion to the action that started it. Keep it in server state.        |
-| `:scopes`                                    | Defaults to provider `default_scopes`. Bound and authoritative.                                                          |
-| `:auth_params`                               | Extra provider params. Map of string (or atom) keys to string/number/boolean values. Reserved keys (`state`, `redirect_uri`, `client_id`, `response_type`, `scope`, `code_challenge`, `code_challenge_method`) return `:reserved_auth_parameter`; other bad shapes return `:invalid_auth_params`. |
-| `:expires_at`                                | Optional `DateTime` in the future, no later than `session_timeout` seconds from now.                                    |
-| `:expected_connection_id`, `:expected_subject` | Reauthorization binding. See below.                                                                                    |
+| Option                                         | Notes                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `:redirect_uri`                                | Required. Tango `/callback` URL registered with the provider.                                                                                                                                                                                                                                     |
+| `:completion_origin`                           | Required. Must be in `allowed_completion_origins`.                                                                                                                                                                                                                                                |
+| `:intent_reference`                            | Required. Opaque string, 1-255 bytes. Ties the completion to the action that started it. Keep it in server state.                                                                                                                                                                                 |
+| `:scopes`                                      | Defaults to provider `default_scopes`. Bound and authoritative.                                                                                                                                                                                                                                   |
+| `:auth_params`                                 | Extra provider params. Map of string (or atom) keys to string/number/boolean values. Reserved keys (`state`, `redirect_uri`, `client_id`, `response_type`, `scope`, `code_challenge`, `code_challenge_method`) return `:reserved_auth_parameter`; other bad shapes return `:invalid_auth_params`. |
+| `:expires_at`                                  | Optional `DateTime` in the future, no later than `session_timeout` seconds from now.                                                                                                                                                                                                              |
+| `:completion_mode`                             | Defaults to `:connection`. Optional `:consume` in 0.4.1 selects a one-time proof; see [consumption.md](consumption.md).                                                                                                                                                                           |
+| `:expected_connection_id`, `:expected_subject` | Connection reauthorization binding. In consume mode, only an independent optional subject is supported. See below.                                                                                                                                                                                |
 
-Session-start errors: `:provider_not_found`, `:invalid_provider_slug`, `:invalid_tenant_id`, `:invalid_redirect_uri` / `:insecure_redirect_uri`, `:invalid_scopes`, `:invalid_completion_origin`, `:invalid_intent_reference`, `:invalid_expiration`, `:reserved_auth_parameter`, `:invalid_auth_params`, `:stale_connection` (expected connection missing, another tenant's, revoked, or already replaced; or `:expected_subject` without `:expected_connection_id`), and `:account_mismatch` (`:expected_subject` differs from the connection's stored subject).
+Session-start errors: `:provider_not_found`, `:invalid_provider_slug`, `:invalid_tenant_id`, `:invalid_redirect_uri` / `:insecure_redirect_uri`, `:invalid_scopes`, `:invalid_completion_origin`, `:invalid_intent_reference`, `:invalid_expiration`, `:reserved_auth_parameter`, `:invalid_auth_params`, `:stale_connection` (expected connection missing, another tenant's, revoked, or already replaced; or, in connection mode, `:expected_subject` without `:expected_connection_id`), and `:account_mismatch` (`:expected_subject` differs from the connection's stored subject).
 
 ## 3. Callback and browser forwarding
 
@@ -158,7 +160,7 @@ end
 
 - Callback: `verify(Tango.Schemas.Provider.t(), %{access_token:, granted_scopes:, provider_data:}, keyword()) :: {:ok, %{subject:, claims:, continuity:}} | {:error, atom()}`.
 - `subject` is the provider's stable account ID as a string. `continuity` is `:initial` or `{:connection, id}`; Tango sets `opts[:connection_id]` when the session expects an existing connection.
-- `provider_data` (0.4.0+) holds the scalar token-response fields the provider's `token_response_metadata` lists, for example `%{"instance_url" => "https://acme.my.salesforce.com"}` for the identity call or Slack `"team.id"` to check the expected workspace. It is `%{}` when none are configured or present ([providers.md](providers.md#token-response-metadata)). It exists only while the candidate is staged: `verify_connection_identity/3` passes `provider_data: %{}`, so a verifier shared with identity rechecks must handle the empty map.
+- `provider_data` (0.4.0+) holds the scalar token-response fields the provider's `token_response_metadata` lists, for example `%{"instance_url" => "https://acme.my.salesforce.com"}` for the identity call or Slack `"team.id"` to check the expected workspace. It is `%{}` when none are configured or present ([providers.md](providers.md#token-response-metadata)). Allowlist only reviewed non-secret identity fields: these are plain metadata, and a safe-looking key can still contain a secret. It exists only while the candidate is staged: `verify_connection_identity/3` passes `provider_data: %{}`, so a verifier shared with identity rechecks must handle the empty map.
 - Only `:network_error`, `:timeout`, `:temporarily_unavailable`, and `:provider_unavailable` leave the handle usable for a retry (map 5xx, 429, timeouts, and transport errors to them as above; adapt the `{:error, ...}` shapes to your client). Any other verifier error, a malformed result (`:invalid_claims`), or a subject/continuity mismatch (`:account_mismatch`) consumes the handle.
 - `claims` must be JSON-compatible, at most 4 KiB encoded, with no token-like keys (`access_token`, `authorization`, `cookie`, `client_secret`, ...) at any depth. Return only display-safe identity fields.
 - Never store, log, or return the access token.
@@ -229,7 +231,7 @@ Finalize must use the Repo from `config :tango, repo:`. Do not call provider API
 
 ## Reauthorizing an existing connection
 
-Tango allows one active connection per provider per tenant through this flow. An initial authorization (no `expected_connection_id`) fails with `:stale_connection` when the tenant already has an active connection for that provider. To reconnect, either reauthorize the existing connection as below or revoke it first.
+Connection completion allows one active connection per provider per tenant through this flow. Consume mode neither blocks on nor replaces existing credential connections. An initial authorization (no `expected_connection_id`) fails with `:stale_connection` when the tenant already has an active connection for that provider. To reconnect, either reauthorize the existing connection as below or revoke it first.
 
 Bind the session to the connection and its known subject:
 
@@ -255,24 +257,24 @@ To recheck or bind an active connection's identity outside a flow, use `Tango.ve
 
 All errors are atoms or `{:oauth_error, category}`; no exception or raw provider body is returned.
 
-| Error                                   | Meaning                                                                    |
-|-----------------------------------------|----------------------------------------------------------------------------|
-| `:invalid_completion`                   | Unknown, malformed, cross-tenant, or wrong-provider handle; missing `:intent_reference`/`:provider` option |
-| `:completion_consumed`                  | Handle already used (handles work once)                                    |
-| `:expired_completion`                   | Candidate older than ten minutes                                           |
-| `:verification_required`                | Finalize called before a successful `verify_authorization/4` for this handle |
-| `:intent_mismatch`                      | Intent reference differs from the session's                                |
-| `:account_mismatch`                     | Verifier subject differs from `expected_subject` / the connection's subject, or verifier continuity is wrong |
-| `:stale_connection`                     | Binding no longer current: an active connection already exists for an initial authorization, or `expected_connection_id` differs/was replaced |
-| `:client_changed`                       | Provider OAuth client ID changed since the session started                 |
-| `:missing_scopes`                       | Granted scopes lack a `required_scopes` entry                              |
-| `:refresh_token_required`               | No refresh token issued or retained                                        |
-| `:token_expired`                        | Candidate access token already expired                                     |
-| `:repo_mismatch`                        | Multi ran on a different Repo than `config :tango, repo:`                  |
-| `:invalid_completion_origin`            | Session origin not in `allowed_completion_origins`                         |
-| `:invalid_claims`                       | Verifier returned a malformed result: missing/blank subject, claims too large, non-JSON, or token-like |
-| `"invalid_session"` (callback `oauth_error`) | Staged session expired, already claimed, or redirect URI differs. An unknown `state`, a `create_session/3` session, or an origin no longer allowed gets no `postMessage` at all |
-| `"client_changed"`, `"access_denied"`, ... (callback `oauth_error`) | Other callback failures as snake_case strings; unrecognized reasons collapse to `"callback_failed"` |
+| Error                                                                                                   | Meaning                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `:invalid_completion`                                                                                   | Unknown, malformed, cross-tenant, or wrong-provider handle; missing `:intent_reference`/`:provider` option                                                                                                                                  |
+| `:completion_consumed`                                                                                  | Handle already used (handles work once)                                                                                                                                                                                                     |
+| `:expired_completion`                                                                                   | Candidate older than ten minutes                                                                                                                                                                                                            |
+| `:verification_required`                                                                                | Finalize called before a successful `verify_authorization/4` for this handle                                                                                                                                                                |
+| `:intent_mismatch`                                                                                      | Intent reference differs from the session's                                                                                                                                                                                                 |
+| `:account_mismatch`                                                                                     | Verifier subject differs from `expected_subject` / the connection's subject, or verifier continuity is wrong                                                                                                                                |
+| `:stale_connection`                                                                                     | Binding no longer current: an active connection already exists for an initial authorization, or `expected_connection_id` differs/was replaced                                                                                               |
+| `:client_changed`                                                                                       | Provider OAuth client ID changed since the session started                                                                                                                                                                                  |
+| `:missing_scopes`                                                                                       | Granted scopes lack a `required_scopes` entry                                                                                                                                                                                               |
+| `:refresh_token_required`                                                                               | No refresh token issued or retained                                                                                                                                                                                                         |
+| `:token_expired`                                                                                        | Candidate access token already expired                                                                                                                                                                                                      |
+| `:repo_mismatch`                                                                                        | Multi ran on a different Repo than `config :tango, repo:`                                                                                                                                                                                   |
+| `:invalid_completion_origin`                                                                            | Session origin not in `allowed_completion_origins`                                                                                                                                                                                          |
+| `:invalid_claims`                                                                                       | Verifier returned a malformed result: missing/blank subject, claims too large, non-JSON, or token-like                                                                                                                                      |
+| `"invalid_session"` (callback `oauth_error`)                                                            | Staged session expired, already claimed, or redirect URI differs. An unknown `state`, a `create_session/3` session, or an origin no longer allowed gets no `postMessage` at all                                                             |
+| `"client_changed"`, `"access_denied"`, ... (callback `oauth_error`)                                     | Other callback failures as snake_case strings; unrecognized reasons collapse to `"callback_failed"`                                                                                                                                         |
 | `"invalid_token_response"`, `"empty_access_token"`, `"invalid_grant_metadata"` (callback `oauth_error`) | Code exchange got a 2xx non-token body (HTML, JSON scalar, malformed), an empty 2xx body, or retained metadata over 4 KiB. A 3xx or a 2xx JSON `error` object posts its OAuth category instead (`"provider_error"`, `"access_denied"`, ...) |
 
 ## Cleanup
@@ -303,6 +305,6 @@ Both return `{:ok, deleted_count}`. Adapt to Quantum, PgFlow, or a GenServer tim
 
 ## Token retention
 
-- Tokens live only in AES-GCM encrypted columns. Candidate handles are stored as SHA-256 hashes; candidate token columns are nulled and `provider_data` reset to `%{}` on finalize and again by cleanup.
+- Tokens live only in AES-GCM encrypted columns. Candidate handles are stored as SHA-256 hashes; candidate token columns are nulled and `provider_data` reset to `%{}` on finalization or consumption and again by cleanup. Safe identity fields remain until cleanup; erasure affects live records, not backups/WAL or guaranteed memory zeroization. Consume mode creates no connection and does not revoke provider-side authorization.
 - The `connection` returned by finalize holds usable plaintext tokens. Persist `connection.id` and the identity summary only; never copy tokens into host tables, job args, logs, error reports, or responses.
 - Read credentials at call time with `Tango.get_active_connection(connection_id, tenant_id, auto_refresh: true)` ([connections.md](connections.md)).

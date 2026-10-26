@@ -82,6 +82,7 @@ metadata: %{"token_response_metadata" => ["instance_url", "team.id"]}
 ```
 
 - Applies to the popup (staged) flow only. The listed fields are stored on the candidate as `provider_data`, keyed by the configured name (dotted paths read nested objects and stay dotted: `%{"team.id" => "T012AB3C4"}`), and handed to the verifier ([authorization.md](authorization.md)). `exchange_code/4` does not retain them.
+- Retained fields are plain metadata. Review and allowlist non-secret identity attributes only; name filtering cannot detect a secret under a harmless-looking key.
 - Only string, number, and boolean values are kept; absent, `null`, and nested values are skipped silently, so `provider_data` may be `%{}`.
 - Names matching `Tango.Validation.sensitive_key?/1` (`id_token`, anything containing `token`, `secret`, `password`, `signature`, `assertion`, `jwt`, `nonce`, ...) are skipped even when listed. `access_token`, `refresh_token`, `expires_in`, and `token_type` can never be retained.
 - More than 4 KiB of encoded JSON fails the exchange with `:invalid_grant_metadata` (callback `oauth_error` `"invalid_grant_metadata"`).

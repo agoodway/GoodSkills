@@ -26,3 +26,17 @@ The host supplies configured Repo/encryption, sandbox or other test ownership, a
 Sandbox ownership is not a transaction: `Tango.lock_connection_generations/3` returns `{:error, :not_in_transaction}` in a test unless the call runs inside an explicit `Repo.transaction/1` on Tango's Repo.
 
 To test token-response metadata or body client auth, pass provider `metadata`, e.g. `insert_provider!(%{metadata: %{"token_response_metadata" => ["instance_url"], "authorization_method" => "body"}})`, and stub the token endpoint (Bypass or similar) in the host suite; invalid values raise `Ecto.InvalidChangesetError`. Assert the verifier's `provider_data` through a stub verifier on the popup path; `exchange_code/4` never retains it.
+
+
+## Consume-mode tests
+
+Use offline stub token/account/membership endpoints and the public staged flow on the configured test Repo. `Tango.Testing` still has no candidate helper; keep candidate inspection and exact-id cleanup in host support. All provider/subject/organization data must be synthetic. Test these observable results:
+
+- Start with `completion_mode: :consume`, stage once, and verify through a host-selected verifier. The verify result has seven keys; `results.proof` after consumption has exactly the five keys in [consumption.md](consumption.md).
+- Append a host step returning an error. Assert consumed state and verification remain unchanged and staged credentials remain present using booleans or safe field allowlists, without dumping candidate structs. Retry the consume Multi without another verifier/provider call or code exchange; assert the host write commits once.
+- After commit, assert no new Tango connection, NULL candidate access/refresh tokens, empty `provider_data`, and consumed state. Use structural assertions, never print credentials or credential-bearing structs on failure.
+- Assert replay/concurrent completion allows one committed host write and produces `:completion_consumed` while the candidate remains (`:invalid_completion` after cleanup). Assert unrelated existing connections remain unchanged and do not block the proof.
+- Exercise optional subject binding, wrong tenant/provider/intent, missing scopes, malformed options, and mode mismatch. Consume accepts only provider, intent, and optional required scopes. Exercise retryable versus permanent verifier failures.
+- For organization administration, stub active admin, inactive admin, active non-admin, wrong organization, and malformed identity responses. Recheck host permission/cancellation/version state inside the Multi and prove host rejection rolls back consumption.
+
+Keep ordinary connection/refresh tests in place. A dependency version string, passing connection test, or schema marker 4 does not prove consumption readiness; inspect revised V04 columns/checks and run the consume path.

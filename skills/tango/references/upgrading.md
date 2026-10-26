@@ -1,23 +1,24 @@
 # Upgrade Tango
 
-A dependency bump does not change the database. `mix tango.setup` generated an install migration that already ran; it will not rerun, and running setup again creates a second install migration whose `down` drops every Tango table. Add a new, version-pinned host migration whenever the target release bundles a newer schema than the database records.
+A dependency bump does not change the database. `mix tango.setup` generated an install migration that already ran; it will not rerun, and running setup again creates a second install migration whose `down` drops every Tango table. Add a new, version-pinned host migration whenever the target release bundles a newer schema than the database records. For 0.4.1, revised V04 also requires a physical schema check even when the marker is already 4.
 
 ## Release to schema
 
-| Tango release | Bundled schema | DDL needed from the previous release |
-|---------------|----------------|--------------------------------------|
-| 0.1.0–0.1.1   | V01            | —                                    |
-| 0.1.2–0.1.3   | V02            | V02                                  |
-| 0.2.0         | V03            | V03 (authorization completion)       |
-| 0.3.0         | V03            | none                                 |
-| 0.4.0         | V04            | V04 (`tango_authorizations.provider_data`); required for every 0.4 install, whether or not a provider uses it |
+| Tango release | Bundled schema | DDL needed from the previous release                                                                                        |
+| ------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 0.1.0-0.1.1   | V01            | -                                                                                                                           |
+| 0.1.2-0.1.3   | V02            | V02                                                                                                                         |
+| 0.2.0         | V03            | V03 (authorization completion)                                                                                              |
+| 0.3.0         | V03            | none                                                                                                                        |
+| 0.4.0         | original V04   | `tango_authorizations.provider_data` and its object check                                                                   |
+| 0.4.1         | revised V04    | Adds completion mode columns/checks to sessions and candidates; marker remains 4, physical shape required for every install |
 
-Confirm against the installed release's `lib/tango/migration.ex` `versions:` list and `priv/repo/sql/versions/` when in doubt.
+This map describes source/schema compatibility, not publication status. Confirm against the installed release's `lib/tango/migration.ex` `versions:` list and `priv/repo/sql/versions/` when in doubt.
 
 ## Detect the current state
 
 ```bash
-rg '"tango"' mix.lock              # Hex release; path/git deps have no Hex lock entry
+rg '"tango"' mix.lock              # Inspect Hex/git resolution; path deps have no lock entry
 rg '@version' deps/tango/mix.exs
 ```
 
@@ -28,15 +29,15 @@ SELECT obj_description('public.tango_providers'::regclass);
 
 Use the configured `schema_prefix` instead of `public` when set. `Tango.Migration.migrated_version/1` reads the same marker but only inside a migration (it uses the migration runner's repo).
 
-A local version string does not prove Hex publication. Verify the target is published before pinning `{:tango, "~> x.y.0"}`; otherwise use the explicitly chosen path/git source for provisional testing, never commit a temporary absolute path, and treat local results as provisional adoption. Publication, tags, pushes, and commits need their own authorization.
+A local version string does not prove Hex publication. Verify the target is published before pinning a Hex dependency such as `{:tango, "~> 0.4.1"}`; otherwise use the explicitly chosen path/git source for provisional testing, never commit a temporary absolute path, and treat local results as provisional adoption. Publication, tags, pushes, and commits need their own authorization.
 
 ## Ordered procedure
 
-There is no mixed-version rolling upgrade across a schema advance: 0.4 code selects `provider_data` and fails against V03.
+Apply required DDL before serving the target code: 0.4 code selects `provider_data` and fails against V03; 0.4.1 also selects `completion_mode` and fails against original V04. Inspect the resolved API implementation and physical schema, even for connection-only consumers.
 
 1. Back up the database. Record the current release and schema marker.
 2. Read the target section below and update host code the release changes (verifiers, error matches, provider metadata).
-3. Generate a pinned migration for the target schema. Pin both directions so rollback returns to the previous version, not version 0.
+3. For a database below V04, generate the pinned migration below. For marker 4, follow the revised V04 procedure instead. Pin both directions so rollback returns to the previous version, not version 0.
 4. Bump the dependency, run `mix deps.update tango`, and inspect the lock for the expected version and unrelated changes.
 5. Run `mix ecto.migrate` before serving the new code.
 6. Verify (below), then run focused consumer tests.
@@ -56,11 +57,23 @@ end
 
 `up(version: N)` applies every missing version from the recorded one, so a V02 database also receives V03. Pass `prefix: "..."` to both calls when the install used a non-default prefix and `schema_prefix` is not configured. From 0.1.x, a separate `UpgradeTangoV03` (`up(version: 3)` / `down(version: 2)`) lets rollback stop at V03, and the popup callback migration below is also required.
 
-Without Ecto migrations, copy each missing `deps/tango/priv/repo/sql/versions/vNN/vNN_up.sql` into the host migration tool in order, replace `$SCHEMA$`, run the statements separated by `--SPLIT--`, and stamp the marker:
+Without Ecto migrations, copy each missing `deps/tango/priv/repo/sql/versions/vNN/vNN_up.sql` into the host migration tool in order, replace `$SCHEMA$`, and execute the reviewed statements and marker in one transaction (with stop-on-error). Keep the `--SPLIT--` statements together transactionally, especially rollback guards and DDL. Stamp only after the DDL succeeds:
 
 ```sql
 COMMENT ON TABLE "public".tango_providers IS 'Tango version=4';
 ```
+
+## Upgrade to 0.4.1 and revised V04
+
+Ordinary direct connections, staged connection finalization, refresh, and revoke remain supported. Connection completion stays the default. Optional one-time proofs select `completion_mode: :consume` at session creation and use the direct owning-module API `Tango.Authorization.multi_consume_authorization/5`; see [consumption.md](consumption.md). Confirm this function in resolved source before using it. Installing 0.4.1 alone applies no DDL and does not prove the feature is ready or published.
+
+0.4.1 revises V04 in place under the explicitly authorized no-external-consumers exception for 0.4.0. There is no V05. Revised V04 retains `provider_data` and adds `completion_mode TEXT NOT NULL DEFAULT 'connection'` on `tango_oauth_sessions` and `tango_authorizations`, mode checks allowing only `connection`/`consume`, and checks forbidding connection bindings on consume rows. Existing rows default to connection mode. Every 0.4.1 installation requires this shape, even if it never uses consume mode.
+
+- Fresh installs apply migrations through revised V04 using the resolved 0.4.1 source.
+- Databases below V04 use the pinned up-to-4/down-to-3 wrapper above with the revised implementation. Missing earlier versions are applied in order.
+- Already-stamped V04 databases need the [physical shape inspection](#verify) below. The applied wrapper does not rerun V04, and rerunning full V04 SQL is not a repair: its columns/checks are not all idempotent. If retaining data, reconcile only the missing DDL in a reviewed targeted host migration. A disposable developer database can instead be recreated fresh and migrated through revised V04.
+
+The current V04 down migration cannot run on original V04: its guard queries the missing `completion_mode` columns before DDL. Current-wrapper down/up roundtripping is not a reconciliation path for that schema. Tango performs no automatic runtime repair; changing the version marker does not repair physical shape.
 
 ## Upgrade 0.3.0 to 0.4.0
 
@@ -112,17 +125,43 @@ Each hit should be server-side use of a loaded connection, not browser or log ha
 
 ## Verify
 
+Read the marker and physical shape using the configured prefix (these examples use `public`):
+
 ```sql
-SELECT obj_description('public.tango_providers'::regclass);   -- 'Tango version=4'
-SELECT conname FROM pg_constraint
-WHERE conname = 'tango_authorizations_provider_data_check';   -- one row
+SELECT obj_description('public.tango_providers'::regclass);
+
+SELECT table_name, column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name IN ('tango_oauth_sessions', 'tango_authorizations')
+  AND column_name IN ('completion_mode', 'provider_data')
+ORDER BY table_name, column_name;
+
+SELECT c.relname AS table_name, con.conname,
+       pg_get_constraintdef(con.oid) AS definition
+FROM pg_constraint con
+JOIN pg_class c ON c.oid = con.conrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND c.relname IN ('tango_oauth_sessions', 'tango_authorizations')
+  AND con.contype = 'c'
+ORDER BY c.relname, con.conname;
 ```
 
-Then run one popup authorization through verify and finalize, refresh one connection, and run `Tango.cleanup_expired_authorizations/0`; each touches the table or token-request path 0.4 changed. For a provider with `token_response_metadata`, assert the verifier receives the expected `provider_data` keys.
+For 0.4.1 require marker 4, both text/NOT NULL/default `'connection'` mode columns, and both mode checks. `tango_oauth_sessions_consume_connection_check` must require a NULL `expected_connection_id` for consume sessions. `tango_authorizations_consume_connection_check` must require NULL `expected_connection_id` and `verified_connection_id` for consume candidates. Retain `provider_data` as JSONB/NOT NULL/default `'{}'` with `tango_authorizations_provider_data_check` requiring a JSON object. Compare definitions as well as constraint names with the resolved `priv/repo/sql/versions/v04/v04_up.sql`.
+
+Then test one ordinary popup through verify/finalize, a connection refresh, and authorization cleanup. For configured metadata, assert the verifier receives the expected safe keys. For one-time proofs, also exercise the [offline consume tests](testing.md#consume-mode-tests), including host rollback/retry without another code exchange, replay, mode isolation, and credential erasure. Record dependency source/API, physical schema, and focused test results separately from publication or live-provider verification.
 
 ## Rollback
 
-- V04 → V03: deploy 0.3.0 code first, then `mix ecto.rollback` the pinned migration; `down(version: 3)` drops the check and column and the marker returns to 3. Staged candidates lose retained fields; connections are untouched. Manual installs run `v04_down.sql` and restamp `'Tango version=3'`.
+Revised V04 to V03 requires coordinated compatible host code and a pinned `down(version: 3)` migration. It first takes `ACCESS EXCLUSIVE` locks on `tango_oauth_sessions`, then `tango_authorizations`, held through DDL and migration completion. These locks block concurrent activity on both tables. Before any DDL, rollback refuses an unexpired consume session with no code exchange (`exchanged_at IS NULL`) or an unexpired consume candidate not yet consumed (`consumed_at IS NULL`).
+
+Complete pending operations or let them expire, then run `Tango.cleanup_expired_authorizations/0` followed by `Tango.cleanup_expired_sessions/0` before retrying. Normal cleanup removes eligible consumed/expired temporary rows; active unexpired work must complete or expire. Revoking ordinary credential connections does not resolve this guard and must not be used to bypass it.
+
+After the guard passes, rollback drops both completion-mode columns and their checks, plus `provider_data` and its object check, and returns the marker to 3. Assess the loss of staged metadata before proceeding; stored connections remain untouched. For manual rollback, execute every reviewed SQL statement and the `Tango version=3` marker together in one stop-on-error transaction, keeping the locks held through DDL.
+
+This revised down SQL requires both `completion_mode` columns. It cannot run against original applied V04 or serve as its reconciliation path; follow [the targeted reconciliation procedure](#upgrade-to-041-and-revised-v04) for that shape.
+
 - 0.3.0 → 0.2.0: no DDL; remove code that calls 0.3 APIs first.
 - V03 → V02: deploy 0.1.x code first; the rollback drops `tango_authorizations` and the binding columns. Pending candidates are lost; users re-authorize.
 - Never roll back by reverting the install migration; its `down` drops every Tango table. Restore the backup if a forward fix is not possible.

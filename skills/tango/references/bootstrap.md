@@ -9,12 +9,12 @@ Add Tango to an existing Phoenix application. Check what is already installed fi
 
 ## Install
 
-Add the requested released, git, or path dependency. Verify Hex availability before choosing 0.4.0; a local 0.4.0 checkout may be unpublished. The example below is for a verified published 0.4.0. For provisional local adoption, follow [upgrading.md](upgrading.md) and preserve the requested source.
+Add the requested released, git, or path dependency. Verify Hex availability before choosing 0.4.1; a local 0.4.1 checkout may be unpublished. The example below applies only after verifying publication of that release. For provisional local adoption, follow [upgrading.md](upgrading.md) and preserve the requested source.
 
 ```elixir
 def deps do
   [
-    {:tango, "~> 0.4.0"}
+    {:tango, "~> 0.4.1"}
   ]
 end
 ```
@@ -45,17 +45,17 @@ Generate the encryption key and keep it in the secret store, never in the repo:
 openssl rand -base64 32
 ```
 
-| Key                          | Purpose                                                                                                       |
-|------------------------------|---------------------------------------------------------------------------------------------------------------|
-| `repo`                       | Host Ecto repo. Required. Finalization must run on this repo.                                                 |
-| `encryption_key`             | 32 raw bytes or base64 of 32 bytes. `Tango.Vault` raises `ArgumentError` on any other size.                   |
-| `api_key`                    | Bearer/`X-API-Key` secret for `Tango.API.Router`. Only needed when mounting the router.                       |
-| `allowed_completion_origins` | Exact page origins allowed to receive popup completion (0.2.0+). See [authorization.md](authorization.md).    |
-| `schema_prefix`              | Postgres schema for Tango tables (default `"public"`). Read with `compile_env`; see note below.                |
-| `session_timeout`            | Session lifetime in seconds and the upper bound for an explicit `:expires_at` (default `1800`).               |
-| `refresh_batch_size`         | Batch size for `Tango.refresh_expiring_connections/0` (default `100`).                                        |
-| `nango_providers_url`        | Override the Nango `providers.yaml` URL used by the catalog mix tasks.                                        |
-| `:api` keyword               | CORS for the router: `cors_origins`, `cors_methods`, `cors_headers`, `cors_max_age`, `cors_credentials`.      |
+| Key                          | Purpose                                                                                                    |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `repo`                       | Host Ecto repo. Required. Finalization and consumption must run on this repo.                              |
+| `encryption_key`             | 32 raw bytes or base64 of 32 bytes. `Tango.Vault` raises `ArgumentError` on any other size.                |
+| `api_key`                    | Bearer/`X-API-Key` secret for `Tango.API.Router`. Only needed when mounting the router.                    |
+| `allowed_completion_origins` | Exact page origins allowed to receive popup completion (0.2.0+). See [authorization.md](authorization.md). |
+| `schema_prefix`              | Postgres schema for Tango tables (default `"public"`). Read with `compile_env`; see note below.            |
+| `session_timeout`            | Session lifetime in seconds and the upper bound for an explicit `:expires_at` (default `1800`).            |
+| `refresh_batch_size`         | Batch size for `Tango.refresh_expiring_connections/0` (default `100`).                                     |
+| `nango_providers_url`        | Override the Nango `providers.yaml` URL used by the catalog mix tasks.                                     |
+| `:api` keyword               | CORS for the router: `cors_origins`, `cors_methods`, `cors_headers`, `cors_max_age`, `cors_credentials`.   |
 
 `Tango.Migration` and the Ecto schemas read `schema_prefix` at compile time. Set it in `config/config.exs` before the first compile, or run `mix deps.compile tango --force` after changing it.
 
@@ -79,9 +79,9 @@ defmodule MyApp.Repo.Migrations.InstallTango do
 end
 ```
 
-`up/0` installs through the latest bundled version (V03 in 0.2.0 and 0.3.0, V04 in 0.4.0; see the table in [upgrading.md](upgrading.md)). `down/0` targets version 0 and drops every Tango table. Run setup once per database; for later versions follow [upgrading.md](upgrading.md).
+`up/0` installs through the latest bundled version (V03 in 0.2.0 and 0.3.0, revised V04 in 0.4.1; see the table in [upgrading.md](upgrading.md)). `down/0` targets version 0 and drops every Tango table. Run setup once per database; for later versions follow [upgrading.md](upgrading.md).
 
-Without Ecto migrations, copy `deps/tango/priv/repo/sql/versions/<version>/` into the host migration tool, replace `$SCHEMA$` with the prefix, and stamp the version marker:
+Without Ecto migrations, copy `deps/tango/priv/repo/sql/versions/<version>/` into the host migration tool, replace `$SCHEMA$` with the prefix, and apply the reviewed SQL plus version marker in one transaction with stop-on-error:
 
 ```sql
 COMMENT ON TABLE "public".tango_providers IS 'Tango version=4';   -- the latest version applied
@@ -91,8 +91,10 @@ COMMENT ON TABLE "public".tango_providers IS 'Tango version=4';   -- the latest 
 
 ```sql
 SELECT obj_description('public.tango_providers'::regclass);
--- Tango version=4 on 0.4.0 (3 on 0.2.0/0.3.0)
+-- Tango version=4 on 0.4.x (3 on 0.2.0/0.3.0)
 ```
+
+On 0.4.1, also verify the physical revised V04 [schema shape](upgrading.md#verify); marker 4 alone cannot distinguish original from revised V04.
 
 Then add a provider ([providers.md](providers.md)) and run one flow end to end ([direct-flow.md](direct-flow.md) or [authorization.md](authorization.md)). Schedule cleanup now so it is not forgotten:
 
