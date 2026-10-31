@@ -57,7 +57,7 @@ Worker health is heartbeat-derived: healthy under 30 seconds, stale through 60 s
 
 Use raw SQL only for objects not exposed here (migration preflight, exact function signatures, pgmq internals). Validate identifiers and summarize results rather than exposing raw rows.
 
-## SQL progress read model (helpers V06)
+## SQL progress read model
 
 `pgflow.step_progress` exposes one row per `(run_id, step_slug)` for host SQL
 consumers such as GraphQL subscriptions. Its columns are `run_id`, `flow_slug`,

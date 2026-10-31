@@ -9,14 +9,14 @@
 
 ## Queue identity
 
-The durable identity is `(queue_name, message_id)`, not `message_id`. Flow slugs keep logical case; current physical queues use lowercase slugs and must be nonempty and at most 47 characters. Case-insensitive slug collisions are invalid. Claim, recovery, cancel/delete, and prune operations must use persisted routes. Per-step custom queues are not implemented.
+The durable identity is `(queue_name, message_id)`, not `message_id`. Flow slugs keep logical case; flow-mode queues use lowercase slugs and must be nonempty and at most 47 characters. Case-insensitive slug collisions are invalid. Claim, recovery, cancel/delete, and prune operations must use persisted routes. Elixir refuses step-mode flows at boot. A TypeScript step-mode worker is a separate deployment.
 
 ## Recovery
 
 Stalled-task recovery is supervised and defaults to a 15-second sweep. A task is eligible only when task, step, and run are all `started` and the effective timeout plus stale threshold elapsed. Recovery uses `FOR UPDATE SKIP LOCKED`, preserves attempt count, increments `requeued_count`, clears ownership/start time, and resets visibility on the persisted queue.
 
-With helpers V05, after three requeues the next sweep archives the message and
-records `permanently_stalled_at`; the task and run remain `started`. With helpers
+On helpers V05, after three requeues the next sweep archives the message and
+records `permanently_stalled_at`; the task and run remain `started`. Since helpers
 V06, the recovery process then calls `pgflow.escalate_permanently_stalled()` as
 a separate query. Escalation locks the run, step, then task; raises the task's
 attempt count to the effective maximum; and calls `fail_task`, so the step's

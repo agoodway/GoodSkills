@@ -95,7 +95,7 @@ Print how to enqueue the job:
 ## Guardrails
 
 - Always use `use PgFlow.Job` and the `@job` module attribute
-- Queue slugs must be unique case-insensitively across all flows/jobs and at most 47 characters
+- Queue slugs follow the same upstream `is_valid_slug` rules as flows: `[A-Za-z0-9_]` only, start with a letter, end with a letter or digit, no `__`, not `run`. The queue name is the lowercased slug, at most 47 characters, and unique across flows and jobs. See [upgrading.md](upgrading.md).
 - All handler return values must be JSON-serializable
 - Do not create the migration file manually — use `mix pgflow.gen.job_migration`
 - For jobs that call external APIs, set appropriate timeouts and retry limits

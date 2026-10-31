@@ -1,6 +1,6 @@
 # Bootstrap PgFlow
 
-Add PgFlow to an existing Phoenix application. Verify the installed dependency and its documentation first; a path/git checkout may contain capabilities that published Hex `0.4.0` does not.
+Add PgFlow to an existing Phoenix application. Verify the installed dependency and its documentation first; a path/git checkout may contain capabilities the latest published Hex release does not. PgFlow 0.6.0 (core V03, helpers V07, upstream pgflow 0.17.2) is newer than Hex `0.5.0`.
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@ Add PgFlow to an existing Phoenix application. Verify the installed dependency a
 
 ## Install
 
-Add the intended released, git, or path dependency and run `mix deps.get`. Do not silently replace a requested local/git build with `{:pgflow, "~> 0.4.0"}`.
+Add the intended released, git, or path dependency and run `mix deps.get`. Do not silently replace a requested local/git build with a Hex version.
 
 Generate consumer-owned wrapper migrations in this order:
 
@@ -22,7 +22,7 @@ mix ecto.migrate
 mix pgflow.check_schema --repo MyApp.Repo
 ```
 
-`mix pgflow.setup` installs core plus Elixir helpers. An already-applied wrapper never reruns after a dependency bump; use the coordinated upgrade workflow in [upgrading.md](upgrading.md).
+`mix pgflow.setup` installs core plus Elixir helpers in a wrapper pinned to explicit versions (`up(version: 3)`, `up(version: 7)` on 0.6.0). Keep wrappers pinned; a bare `up()` installs whatever version the dependency bundles when history is replayed. An already-applied wrapper never reruns after a dependency bump; use the coordinated upgrade workflow in [upgrading.md](upgrading.md).
 
 ## Configure and supervise
 

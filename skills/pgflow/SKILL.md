@@ -32,8 +32,11 @@ For `/pgflow help` or an unknown/missing subcommand, list: `bootstrap`, `upgrade
 
 ## Non-negotiable safety rules
 
-- Treat logical flow identity and physical queue identity separately. Queue operations use persisted `(queue_name, message_id)`; current default queue routes are lowercase flow slugs.
-- Do not overlap old and new workers during a schema upgrade. Pause producers, drain, stop all writers, apply the new schema version, verify, and deploy matching callers.
+- Treat logical flow identity and physical queue identity separately. Queue operations use persisted `(queue_name, message_id)`; flow-mode queue routes are lowercase flow slugs, at most 47 characters.
+- PgFlow 0.6.0 shares a database with TypeScript 0.17.x only in flow mode. Elixir refuses step-mode flows with `{:error, {:unsupported_queue_mode, slug, "step"}}`. A routing mismatch is `{:error, {:flow_routing_mismatch, message}}`. Workers are stamped `elixir-<package version>`.
+- Slugs follow upstream `is_valid_slug`. Compile-time slug errors are fixed in code; migrations never rename slugs. Run `mix pgflow.audit_slugs` before `mix pgflow.setup --upgrade`; clear findings with `pgflow.delete_flow_and_data` while drained, not SQL renames.
+- Do not overlap old and new workers during a schema upgrade. Pause producers, drain until no task is `started` (queued tasks are kept), stop all writers, apply the new schema version, verify, and only then deploy matching callers.
+- Keep setup wrappers pinned (`up(version: N)`). A bare `up()` installs the newest bundled version when migration history is replayed on an empty database.
 - Do not expect an applied setup migration to rerun after a dependency bump. Use the host's migration manager; in Ecto-managed applications, generate a new `mix pgflow.setup --upgrade` wrapper.
 - When an upgrade also moves/restores the database, a green PgFlow schema does not prove recurring schedules survived. Inventory cron state on the source and reconcile host-owned schedules on the target from canonical application configuration.
 - Run `mix pgflow.check_schema`; worker bootstrap checks only the runtime-critical subset. A ready starter can still have permanently failed modules.
