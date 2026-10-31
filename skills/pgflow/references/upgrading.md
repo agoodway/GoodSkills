@@ -1,6 +1,19 @@
 # Upgrade PgFlow schema
 
-Use this for an existing installation when a dependency adds a core or helpers migration. PgFlow 0.6.0 targets upstream pgflow 0.17.2 (`baa9e43f5f9122133deacbc3e8ffc80e284b4f50`): core V03 and helpers V07. PgFlow 0.4.0 stayed on core V02 and helpers V05. PgFlow 0.5.0 stayed on core V02 and added helpers V06. Those earlier releases are not the current schema. Check which release the consumer actually depends on: Hex may lag the source repository.
+Use this for an existing installation when a dependency bump adds a core or helpers migration. PgFlow 0.7.0 targets upstream pgflow 0.17.2 (`baa9e43f5f9122133deacbc3e8ffc80e284b4f50`): core V03 and helpers V07. 0.6.0 was never published to Hex; its schema work ships in 0.7.0.
+
+| Release | Core | Helpers | Notes                                                    |
+| ------- | ---- | ------- | -------------------------------------------------------- |
+| 0.4.x   | V02  | V05     | Previous release line.                                   |
+| 0.5.x   | V02  | V06     | Adds `escalate_permanently_stalled` and `step_progress`. |
+| 0.7.0   | V03  | V07     | Current. Shares a database with TypeScript 0.17.x.       |
+
+Confirm both sides before planning. The dependency: `mix.lock` and `PgFlow.compatibility_report/0` (`bundled_core_version`, `bundled_helpers_version`). The database:
+
+```sql
+SELECT obj_description('pgflow.pgflow_version'::regclass, 'pg_class') AS core,
+       obj_description('pgflow.extensions_version'::regclass, 'pg_class') AS helpers;
+```
 
 There is no expand/contract path and no mixed-version rolling upgrade. The upgrade is one transaction behind a stop-and-drain.
 
@@ -10,9 +23,9 @@ There is no expand/contract path and no mixed-version rolling upgrade. The upgra
 mix pgflow.audit_slugs
 ```
 
-No findings means the database can take V03. The task finds the host app's repo on its own; pass `--repo MyApp.Repo` only when the app has several. The migration never renames or deletes a slug.
+`no slug findings` means the database can take V03; each finding prints as `<kind> <flow_slug>.<step_slug>: <reason>` and the task exits with an error. It finds the host repo on its own; pass `--repo MyApp.Repo` when the app has several (`--prefix` defaults to `pgflow`). The migration never renames or deletes a slug.
 
-`pgflow.is_valid_slug/1` accepts only `[A-Za-z0-9_]`, must start with a letter, must end with a letter or digit, must not contain `__`, must be at most 128 characters, and must not be `run`. The flow-mode queue name is `lower(flow_slug)`, at most 47 characters, and unique across flows and jobs. Step slugs that differ only by case collide. Finding reasons: `empty`, `too_long`, `bad_chars`, `bad_start`, `bad_end`, `double_underscore`, `reserved`, `queue_name_too_long`, and `case_insensitive_duplicate`. Compile-time validation rejects the same problems, including case-insensitive step collisions.
+`pgflow.is_valid_slug/1` accepts only `[A-Za-z0-9_]`, must start with a letter, must end with a letter or digit, must not contain `__`, must be at most 128 characters, and must not be `run`. The flow-mode queue name is `lower(flow_slug)`, at most 47 characters, and unique across flows and jobs. Step slugs that differ only by case collide. Finding reasons: `empty`, `too_long`, `bad_chars`, `bad_start`, `bad_end`, `double_underscore`, `reserved`, `queue_name_too_long`, and `case_insensitive_duplicate`.
 
 ### Clearing a finding
 
@@ -26,16 +39,16 @@ Renaming the slug in Elixir code does not clear a finding: the old `flows` and `
 
 ## 2. Pin consumer migration history
 
-From 0.6.0, a bare `PgFlow.Migration.up()` installs the newest bundled core version and a bare `PgFlow.HelpersMigration.up()` the newest helpers version. Replaying an old `setup_pgflow` wrapper on an empty database (CI, a new machine, a review environment) therefore installs V03 and V07, and older flow-compile migrations with legacy slug literals then fail the slug rules.
+A bare `PgFlow.Migration.up()` installs the newest bundled core version and a bare `PgFlow.HelpersMigration.up()` the newest helpers version. Replaying an old `setup_pgflow` wrapper on an empty database (CI, a new machine, a review environment) therefore installs V03 and V07, and older flow-compile migrations with legacy slug literals then fail the slug rules.
 
-Before shipping 0.6.0, pin every existing wrapper to the versions it originally installed (for example `PgFlow.Migration.up(version: 1)` and `PgFlow.HelpersMigration.up(version: 1)`) and fix legacy slug literals in historical compile migrations. Databases that already ran those migrations are unaffected; Ecto does not rerun them. Newly generated wrappers are pinned.
+Before shipping 0.7.0, pin every existing wrapper to the versions it originally installed (for example `PgFlow.Migration.up(version: 1)` and `PgFlow.HelpersMigration.up(version: 1)`) and fix legacy slug literals in historical compile migrations. Databases that already ran those migrations are unaffected; Ecto does not rerun them. Wrappers generated by `mix pgflow.setup` and `mix pgflow.setup --upgrade` are pinned.
 
 ## 3. Stop and drain
 
-Back up first and record enabled/disabled worker state. Then, in order:
+V03 requires it. Back up first and record enabled/disabled worker state. Then, in order:
 
 1. Stop producers: `start_flow`, enqueue calls, cron schedules, and TypeScript `startFlow`.
-2. Stop stalled-task recovery and pruning.
+2. Stop stalled-task recovery and pruning (`prune_data_older_than`).
 3. Stop definition writers: flow/job compile migrations, Elixir worker boot (it compiles definitions), and TypeScript compile commands.
 4. Let workers finish active handlers, then stop every Elixir and TypeScript worker gracefully.
 5. Wait until this returns 0:
@@ -48,53 +61,97 @@ Do not wait for `queued` tasks: with workers stopped that count never drains. Qu
 
 ## 4. Migrate
 
-Apply through the host application's migration manager. For Hasura, create the migration with its CLI and assemble the installed package's versioned SQL there; do not run Ecto migrations. For Ecto-managed applications, generate a new wrapper (Ecto never reruns an older setup migration):
+Core and helpers go in one transaction, core first. Never pin helpers below 7 on core 3: replaying helpers V05 re-creates the four-argument `start_tasks` that V03 removed.
+
+### Ecto-managed applications
+
+Ecto never reruns an already recorded setup wrapper, so generate a new one:
 
 ```bash
 mix pgflow.setup --upgrade
 mix ecto.migrate
+```
+
+The generated `<timestamp>_upgrade_pgflow_core_v03_helpers_v07.exs` calls `PgFlow.Migration.up(version: 3)` then `PgFlow.HelpersMigration.up(version: 7)` in one normal Ecto transaction. EctoEvolver applies only versions newer than the database tracks, so from helpers V05 it runs V06 and V07. Do not add `@disable_ddl_transaction true`. Add `--dashboard` only when historical `PgFlowDashboard.Migration` SQL should move in the same transaction.
+
+### Hasura or another SQL migration manager
+
+Do not run Ecto migrations. Create the migration with the manager's own tooling (for Hasura, its CLI) and assemble it from the installed package (`deps/pgflow/priv/...`), in this order:
+
+1. `priv/pgflow_core/sql/versions/v03/v03_up.sql`
+2. From helpers V05 only: `priv/pgflow_helpers/sql/versions/v06/v06_up.sql`
+3. `priv/pgflow_helpers/sql/versions/v07/v07_up.sql`
+4. The version comments that EctoEvolver would write:
+
+   ```sql
+   COMMENT ON VIEW pgflow.pgflow_version IS 'PgFlow version=3';
+   COMMENT ON VIEW pgflow.extensions_version IS 'PgFlow version=7';
+   ```
+
+While assembling, replace `$SCHEMA$` with `pgflow` (the helpers files use the placeholder; core V03 already names `"pgflow"`), and replace every `--SPLIT--` marker with a statement terminator (`;`). Keep the whole migration in one transaction: the core file starts with `SET LOCAL lock_timeout = '10s'` and its slug pre-flight must abort everything on a finding. Write no down migration; restore the backup instead.
+
+### What the migration does
+
+- V03 sets `lock_timeout` to 10 seconds and runs the slug pre-flight; any finding aborts the transaction and leaves the previous schema in place. The timeout bounds lock acquisition, not migration duration.
+- Outage cost: V03 drops and rebuilds `idx_runs_started_at` (descending to ascending, matching upstream) under an exclusive lock inside the transaction. Duration grows with `pgflow.runs`; check `SELECT count(*) FROM pgflow.runs;` and size the window.
+- Helpers V07 adds `pgflow.delete_run(uuid)` and replaces `prune_data_older_than` with a run-first lock order.
+- From helpers V05, V06 adds `pgflow.escalate_permanently_stalled()`. Once recovery resumes, every sweep calls it after the recovery query commits. A manual `SELECT pgflow.escalate_permanently_stalled();` must also run in its own transaction, never with the recovery query (deadlock path with live workers).
+
+## 5. Verify
+
+```bash
 mix pgflow.check_schema
 ```
 
-The generated `<timestamp>_upgrade_pgflow_core_v03_helpers_v07.exs` calls `PgFlow.Migration.up(version: 3)` then `PgFlow.HelpersMigration.up(version: 7)` in one normal Ecto transaction. Do not add `@disable_ddl_transaction true`. V03 sets `lock_timeout` to 10 seconds and runs the slug pre-flight; any finding aborts the transaction and leaves the previous schema in place.
+It finds the host repo without `--repo`. Pass `--notify-trigger pgmq_default` when the app configures `notify_trigger: :pgmq_default`. A pass may still print warnings; see [compatibility.md](compatibility.md). `PgFlow.compatibility_report/0` reports `upstream_release: "0.17.2"`, `bundled_core_version: 3`, and `bundled_helpers_version: 7`.
 
-Core V03 requires helpers V07. Never pin helpers below 7 on core 3: replaying helpers V05 re-creates the four-argument `start_tasks` that V03 removed.
+## 6. Deploy and resume
 
-Outage cost: V03 drops and rebuilds `idx_runs_started_at` (descending to ascending, matching upstream) under an exclusive lock inside the transaction. Duration grows with `pgflow.runs`; check `SELECT count(*) FROM pgflow.runs;` and size the window.
+Migrate before deploying. On the old schema, 0.7.0 workers never start: `PgFlow.FlowStarter` marks each module `:failed_permanent` with `{:schema_incompatible, object}` while the application itself still boots.
 
-## 5. Deploy and resume
-
-Migrate before deploying. On the old schema, 0.6.0 workers never start: `PgFlow.FlowStarter` marks each module permanently failed with `{:schema_incompatible, object}` while the application itself still boots.
-
-1. Deploy the Elixir release requiring core V03 and helpers V07.
+1. Deploy the Elixir 0.7.0 release. Boot it before resuming producers (see below).
 2. Deploy TypeScript 0.17.x workers, on flow-mode flows only.
-3. Restore recovery, pruning, and the exact recorded worker state, then resume producers.
+3. Restore recovery, pruning, and the exact recorded worker state.
+4. Resume producers.
 
-`mix pgflow.check_schema` finds the host repo without `--repo`. `PgFlow.compatibility_report/0` reports `upstream_release: "0.17.2"`, `bundled_core_version: 3`, and `bundled_helpers_version: 7`.
+### First 0.7 boot in `:notify` mode
 
-## What changed in 0.6.0
+With `signal_strategy: :notify` and the default `notify_trigger: :deferred`, `FlowStarter` recreates pgmq's insert trigger on each flow queue as `DEFERRABLE INITIALLY DEFERRED`:
 
-- Flow mode keeps one queue per flow, `lower(flow_slug)`. Step mode (private step queues plus a route map) is TypeScript-only: Elixir refuses step-mode flows at boot with `{:error, {:unsupported_queue_mode, slug, "step"}}`, before compiling, even when local recompilation is enabled. The check holds upstream's flow-definition advisory lock, so a concurrent TypeScript step-mode compile cannot be recompiled away.
+- The swap runs in its own transaction with `lock_timeout` set to `notify_lock_timeout_ms` (default `2000`) and a per-queue advisory lock, so nodes install one at a time. It needs `ACCESS EXCLUSIVE` on `pgmq.q_<queue>`; on `lock_not_available` the module retries with backoff. Booting while producers are still paused avoids that contention.
+- If the deferred recreate fails after pgmq's own call succeeds, pgmq's immediate trigger stays, a warning is logged, and `mix pgflow.check_schema` reports it.
+- Later boots that find the deferred trigger only reconcile the queue's `pgmq.notify_insert_throttle` row, with no DDL.
+- Trigger errors now fail the producer's COMMIT instead of its INSERT. A transaction that sends to a queue and then drops or purges it must first call `PgFlow.Queries.Pgmq.flush_notify_events/1`; `PgFlow.delete_flow/1` does this itself.
+- To keep pgmq's immediate trigger, set `notify_trigger: :pgmq_default` on every node. Mixed values flip the trigger back and forth on each boot.
+
+## Databases that applied a pre-release helpers V07
+
+`delete_run` and the run-first prune joined helpers V07 before 0.7.0 shipped. A database that applied V07 from an earlier pre-release build reports helpers version 7 but lacks `pgflow.delete_run(uuid)`, and Ecto will not rerun its wrapper. Workers still boot (the bootstrap check does not cover it), but `PgFlow.Runs.delete/2` fails and pruning keeps the old lock order. Full `mix pgflow.check_schema` fails with `missing run deletion function pgflow.delete_run(uuid)`.
+
+Either recreate the database, or apply the last two statements of `priv/pgflow_helpers/sql/versions/v07/v07_up.sql` (the `delete_run` and `prune_data_older_than` definitions, with `$SCHEMA$` replaced by `pgflow`) in a reviewed migration. Both are `CREATE OR REPLACE`, so re-applying them is safe. Do not change the version comment.
+
+## What changed in 0.7.0
+
+- Flow mode keeps one queue per flow, `lower(flow_slug)`. Step mode is TypeScript-only: Elixir refuses step-mode flows at boot with `{:error, {:unsupported_queue_mode, slug, "step"}}`, before compiling, holding upstream's flow-definition advisory lock.
 - A queue-mode or route mismatch is `{:error, {:flow_routing_mismatch, message}}` with the upstream text.
-- `start_tasks(text, bigint[], uuid, text, text)`: the last argument is the step slug, null for flow-mode claims.
-- `ensure_flow_compiled(text, jsonb, text, jsonb)`: Elixir passes `'flow'` and a null route map.
-- `register_worker` takes four arguments; workers stamp `pgflow_version` as `elixir-<package version>`.
+- `start_tasks(text, bigint[], uuid, text, text)`: the last argument is the step slug, null for flow-mode claims. `ensure_flow_compiled(text, jsonb, text, jsonb)`: Elixir passes `'flow'` and a null route map. `register_worker` takes four arguments; workers stamp `pgflow_version` as `elixir-<package version>`.
 - `PgFlow.Config` raises `ArgumentError` at boot when two configured flows or jobs share a queue name.
 - `pgflow_telemetry` and `ensure_workers` (Supabase `pg_net`) are not installed; OTP registers workers.
+- `pgflow.delete_run(uuid)` behind `PgFlow.Runs.delete/2`. There is no per-run cancel or fail API.
+- Runtime worker controls (`worker_options`, `scale_worker/2`, `check_worker/2`) and stricter `start_worker/2` validation: see [operations.md](operations.md). Unknown `start_worker/2` options now raise instead of being ignored.
+- Deferred notify triggers and new `mix pgflow.check_schema` warnings: see [config.md](config.md) and [compatibility.md](compatibility.md).
 
 Rollback: the wrapper is forward-only and `down/0` raises. Restore the pre-drain backup.
 
-## Operational risk (older upgrades)
+## Older paths and recovery tools
 
-Core V02 rewrites `step_tasks`, scans constraints, creates a non-concurrent unique index, and holds an `ACCESS EXCLUSIVE` lock through the transaction. Measure table/index size, disk, WAL capacity, long transactions, and vacuum needs on a restored copy. The lock timeout bounds acquisition, not migration duration.
+Databases still on core V01 follow the September procedure in the installed PgFlow `docs/UPGRADING_UPSTREAM_2026_09.md` first. Core V02 rewrites `step_tasks`, scans constraints, creates a non-concurrent unique index, and holds an `ACCESS EXCLUSIVE` lock through the transaction; rehearse it on a restored copy.
 
 Never rerun an old setup wrapper. Use `mix pgflow.stamp` only after proving an untracked legacy schema exactly matches the expected baseline; stamping drift makes later migrations unsafe.
 
-For `flow_shape_mismatch`, compare the ordered stored steps with the code.
-Restore matching code or introduce a new flow slug for the changed shape.
-Do not rewrite `step_index` to make the check pass.
+For `flow_shape_mismatch`, compare the ordered stored steps with the code. Restore matching code or introduce a new flow slug for the changed shape. Do not rewrite `step_index` to make the check pass.
 
-Production shape mismatch preserves history. Destructive recompilation is controlled by the database `app.settings.jwt_secret` GUC matching the Supabase local default—not by `MIX_ENV`. Never set that GUC on a history-bearing database.
+Production shape mismatch preserves history. Destructive recompilation is controlled by the database `app.settings.jwt_secret` GUC matching the Supabase local default, not by `MIX_ENV`. Never set that GUC on a history-bearing database.
 
 ## Database restores and project cutovers
 
@@ -115,7 +172,7 @@ Before stopping the source database:
 
 After restoring the target and before resuming producers:
 
-1. Query the target independently. **Never conclude “nothing to restore” from
+1. Query the target independently. **Never conclude "nothing to restore" from
    an empty target `cron.job`; compare it with the source inventory and
    canonical host configuration.**
 2. Restore PgFlow-owned registrations from saved schedule state or reviewed
@@ -123,7 +180,7 @@ After restoring the target and before resuming producers:
    intentionally disabled schedules. Use a new forward migration or an explicit
    reconciliation operation; do not rerun old definition migrations or recompile
    entire flows merely to restore cron rows.
-3. Run the host application's idempotent schedule reconciliation after Ecto
+3. Run the host application's idempotent schedule reconciliation after
    migrations. A one-time migration alone is insufficient because its
    `schema_migrations` row may also have been restored.
 4. Compare exact job names, schedules, commands, active state, database, and
@@ -133,27 +190,7 @@ After restoring the target and before resuming producers:
    catch-up task execution is a separate explicitly approved operation.
 
 The release path should invoke host reconciliation after migrations on every
-deploy. This makes a restored database self-repairing even when no Ecto
-migration is pending.
+deploy. This makes a restored database self-repairing even when no migration
+is pending.
 
-## Helpers V05 to V06 (previous release)
-
-V06 adds `pgflow.escalate_permanently_stalled()` and `pgflow.step_progress`.
-Hex pgflow 0.4.0 stops at helpers V05; Hex pgflow 0.5.0 bundles V06. A
-dependency bump alone does not apply its SQL.
-Install the V06 helper SQL through the host's migration manager while workers
-and recovery are stopped. Run the one-time escalation pass only after the V06
-function is installed; it terminalizes tasks that V05 stamped and left started.
-Set the helpers version comment to `PgFlow version=6`, then run
-`mix pgflow.check_schema --repo MyApp.Repo` before resuming workers. V06 worker
-bootstrap rejects a V05 helpers schema. The one-time SQL pass is:
-
-```sql
-SELECT pgflow.escalate_permanently_stalled();
-```
-
-The recovery query and escalation query must commit separately. Recovery locks
-task rows first; `fail_task` locks run and step rows first. Combining them in
-one transaction creates a deadlock path with live workers. Hosts that use
-Hasura or another migration manager should assemble the versioned SQL into
-that manager's migration instead of running `mix ecto.migrate`.
+Physical and point-in-time restores, like crash recovery, empty UNLOGGED tables such as `pgmq.notify_insert_throttle`. In `:notify` mode, worker boot and `PgFlow.Signal.Notify` restore missing rows; `mix pgflow.check_schema` warns until they do.

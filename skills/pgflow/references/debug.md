@@ -45,7 +45,7 @@ Worker and queue health:
 )
 ```
 
-Use `PgFlow.FlowStarter.module_status(Module)` to distinguish pending/retrying, succeeded, and permanently failed startup. `ready?/0` means every module reached a terminal state; it can be true when modules failed. Run `mix pgflow.check_schema --repo MyApp.Repo` for schema/signature failures.
+Use `PgFlow.check_worker(Module)` for the local worker's lifecycle, active task count, and effective versus configured limits (`nil` when none runs on this node). Use `PgFlow.FlowStarter.module_status(Module)` to distinguish pending/retrying, succeeded, and permanently failed startup. `ready?/0` means every module reached a terminal state; it can be true when modules failed. Run `mix pgflow.check_schema --repo MyApp.Repo` for schema/signature failures; in `:notify` mode its warnings flag immediate triggers and missing throttle rows, which leave workers waiting for the fallback poll.
 
 ## Interpret state
 
@@ -54,10 +54,10 @@ Use `PgFlow.FlowStarter.module_status(Module)` to distinguish pending/retrying, 
 - `attempts_count` is aggregated per task row. Use structured logs/telemetry keyed by run, step, and task index for an attempt-by-attempt timeline.
 - A started task beyond its effective timeout plus stale threshold is eligible for recovery. `permanently_stalled_at` means the recovery requeue cap was exceeded; it does not itself terminalize the run.
 - Message ownership is `(queue_name, message_id)`, never message ID alone.
-- A growing queue with no healthy persisted worker usually points to bootstrap failure, a stopped worker, stale heartbeat, or database connectivity—not merely an empty local process registry.
+- A growing queue with no healthy persisted worker usually points to bootstrap failure, a stopped worker, stale heartbeat, or database connectivity, not merely an empty local process registry.
 
 ## Report
 
 Summarize run status/timing, step states, task attempt/requeue data, worker health, queue count, last errors, and the evidence-based diagnosis. Do not invent individual attempt history from the aggregate task row.
 
-Keep this command read-only. If mutation is requested, name the exact public operation and its consequences: `Runs.make_available/2`, `Runs.delete/2`, `Definitions.unschedule/2`, or `PgFlow.stop_worker/1`. Never delete a persisted worker row as a substitute for stopping its live process.
+Keep this command read-only. If mutation is requested, name the exact public operation and its consequences: `Runs.make_available/2`, `Runs.delete/2`, `Definitions.unschedule/2`, `PgFlow.scale_worker/2`, or `PgFlow.stop_worker/1`. There is no per-run cancel or fail API: `Runs.delete/2` discards history and does not stop a running handler. Never delete a persisted worker row as a substitute for stopping its live process.

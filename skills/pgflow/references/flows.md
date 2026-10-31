@@ -16,17 +16,17 @@ end
 
 ### @flow Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `queue` | atom | required | Logical flow slug; current physical queue is its lowercase form. Must be case-insensitively unique and at most 47 characters. `slug:` is an alias. |
-| `max_attempts` | integer | 1 | Maximum retry attempts per step |
-| `base_delay` | integer | 1 | Initial backoff delay in seconds |
-| `timeout` | integer | 30 | Execution timeout per step in seconds |
-| `cron` | keyword | nil | Scheduled execution (`schedule:` cron expr, `input:` default input) |
+| Option         | Type    | Default  | Description                                                                                                                                        |
+| -------------- | ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `queue`        | atom    | required | Logical flow slug; current physical queue is its lowercase form. Must be case-insensitively unique and at most 47 characters. `slug:` is an alias. |
+| `max_attempts` | integer | 1        | Maximum retry attempts per step                                                                                                                    |
+| `base_delay`   | integer | 1        | Initial backoff delay in seconds                                                                                                                   |
+| `timeout`      | integer | 30       | Execution timeout per step in seconds                                                                                                              |
+| `cron`         | keyword | nil      | Scheduled execution (`schedule:` cron expr, `input:` default input)                                                                                |
 
 ## Step Types
 
-### step — Single Execution
+### step: Single Execution
 
 Root steps (no dependencies) receive the flow input directly:
 
@@ -51,7 +51,7 @@ step :charge, depends_on: [:validate, :lookup_customer] do
 end
 ```
 
-### map — Parallel Array Processing
+### map: Parallel Array Processing
 
 Processes each element of an array output in parallel:
 
@@ -68,19 +68,19 @@ The `:array` option specifies which dependency step produces the array to iterat
 
 ### Step Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `depends_on` | list of atoms | `[]` | Steps this depends on (empty = root step) |
-| `handler` | module | nil | External handler module (alternative to inline fn) |
-| `max_attempts` | integer | flow default | Override retry attempts |
-| `base_delay` | integer | flow default | Override backoff delay |
-| `timeout` | integer | flow default | Override execution timeout |
-| `start_delay` | integer | 0 | Delay before step starts (seconds) |
-| `array` | atom | nil | For map steps: which step's output to iterate |
-| `if` | JSON value | nil | Run only if the step's input contains this pattern (jsonb `@>`) — see [conditional-steps.md](conditional-steps.md) |
-| `if_not` | JSON value | nil | Run only if the step's input does NOT contain this pattern |
-| `when_unmet` | `:fail`/`:skip`/`:skip_cascade` | `:skip` | Outcome when `if`/`if_not` is unsatisfied (requires one of them) |
-| `when_exhausted` | `:fail`/`:skip`/`:skip_cascade` | `:fail` | Outcome when retries are exhausted — `:skip` makes a step fail-soft |
+| Option           | Type                            | Default      | Description                                                                                                       |
+| ---------------- | ------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `depends_on`     | list of atoms                   | `[]`         | Steps this depends on (empty = root step)                                                                         |
+| `handler`        | module                          | nil          | External handler module (alternative to inline fn)                                                                |
+| `max_attempts`   | integer                         | flow default | Override retry attempts                                                                                           |
+| `base_delay`     | integer                         | flow default | Override backoff delay                                                                                            |
+| `timeout`        | integer                         | flow default | Override execution timeout                                                                                        |
+| `start_delay`    | integer                         | 0            | Delay before step starts (seconds)                                                                                |
+| `array`          | atom                            | nil          | For map steps: which step's output to iterate                                                                     |
+| `if`             | JSON value                      | nil          | Run only if the step's input contains this pattern (jsonb `@>`); see [conditional-steps.md](conditional-steps.md) |
+| `if_not`         | JSON value                      | nil          | Run only if the step's input does NOT contain this pattern                                                        |
+| `when_unmet`     | `:fail`/`:skip`/`:skip_cascade` | `:skip`      | Outcome when `if`/`if_not` is unsatisfied (requires one of them)                                                  |
+| `when_exhausted` | `:fail`/`:skip`/`:skip_cascade` | `:fail`      | Outcome when retries are exhausted; `:skip` makes a step fail-soft                                                |
 
 ## Handler Context
 
@@ -108,16 +108,16 @@ end
 Handlers can return:
 
 ```elixir
-# Success — map is serialized to JSON and stored as step output
+# Success: map is serialized to JSON and stored as step output
 %{key: "value"}
 
-# Success — explicit ok tuple
+# Success: explicit ok tuple
 {:ok, %{key: "value"}}
 
-# Failure — triggers retry (up to max_attempts)
+# Failure: triggers retry (up to max_attempts)
 {:error, "something went wrong"}
 
-# Failure — raises are caught and trigger retry
+# Failure: raises are caught and trigger retry
 raise "unexpected error"
 ```
 
@@ -128,12 +128,12 @@ never wrapped in a synthetic object.
 
 ## DAG Rules
 
-- Steps form a directed acyclic graph (DAG) — no cycles allowed
+- Steps form a directed acyclic graph (DAG); no cycles allowed
 - Steps with no `depends_on` are root steps and run immediately
 - A step runs only after ALL its dependencies are resolved (completed, or skipped without cascade)
 - If a step exhausts its retries with `when_exhausted: :fail` (the default), the entire run fails; with `:skip`/`:skip_cascade` the step is marked skipped and the run continues
-- A skipped (non-cascade) dependency's key is **omitted** from dependent inputs — dependents still run; `:skip_cascade` skips the dependents too. See [conditional-steps.md](conditional-steps.md)
-- Runs containing skipped steps complete successfully — skipped counts as resolved, not failed
+- A skipped (non-cascade) dependency's key is **omitted** from dependent inputs, and dependents still run; `:skip_cascade` skips the dependents too. See [conditional-steps.md](conditional-steps.md)
+- Runs containing skipped steps complete successfully; skipped counts as resolved, not failed
 - Map steps expand at runtime based on the array length
 - Map steps accept zero or one dependency; dependent sources must produce arrays, and empty arrays complete without tasks
 - Multiple root steps run in parallel
@@ -211,13 +211,13 @@ slug for incompatible changes; destructive local upsert can remove history.
 ## Starting Flows
 
 ```elixir
-# Async — returns immediately
+# Async: returns immediately
 {:ok, run_id} = PgFlow.start_flow(:process_order, %{
   "order_id" => 123,
   "items" => ["item_a", "item_b"]
 })
 
-# Sync — waits for completion
+# Sync: waits for completion
 {:ok, run} = PgFlow.start_flow_sync(:process_order, %{
   "order_id" => 123
 }, timeout: 30_000, poll_interval: 500)

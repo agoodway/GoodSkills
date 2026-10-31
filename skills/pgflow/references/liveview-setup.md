@@ -4,8 +4,8 @@ Scaffold a Phoenix LiveView module with PgFlow LiveClient integration for real-t
 
 ## Inputs
 
-- **Arg form**: `/pgflow liveview MyAppWeb.OrderFlowLive :process_order` — create LiveView for the given flow.
-- **Partial arg**: `/pgflow liveview :process_order` — create LiveView, derive module name from flow slug.
+- **Arg form**: `/pgflow liveview MyAppWeb.OrderFlowLive :process_order`: create LiveView for the given flow.
+- **Partial arg**: `/pgflow liveview :process_order`: create LiveView, derive module name from flow slug.
 - **No arg**: Ask the user which flow to track and what to name the LiveView.
 
 ## Workflow
@@ -203,9 +203,9 @@ end
 
 ## Guardrails
 
-- Always use `LiveClient.init/2` in mount — it sets up required assigns
-- Always handle `{:pgflow, _, _}` messages in `handle_info` — missing this means no updates
+- Always use `LiveClient.init/2` in mount; it sets up required assigns
+- Always handle `{:pgflow, _, _}` messages in `handle_info`; missing this means no updates
 - The `pubsub` option must match the PgFlow config
-- LiveClient applies incremental updates — no polling needed
+- LiveClient applies incremental updates; no polling needed
 - Step status generally advances `created` → `started` → terminal; an authoritative
   `skipped` may replace a provisional `failed` for `when_exhausted: :skip`

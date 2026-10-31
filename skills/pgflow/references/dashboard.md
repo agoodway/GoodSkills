@@ -37,14 +37,14 @@ end
 
 ## Dashboard Pages
 
-| Page | Content |
-|------|---------|
-| **Overview** | Active workers, run counts, key metrics |
-| **Flows** | Flow definitions with 24h statistics |
-| **Jobs** | Job definitions with statistics |
-| **Crons** | Scheduled tasks with next run times |
-| **Runs** | Filterable list with status, duration, progress (skipped steps count toward progress) |
-| **Workers** | Worker health status and throughput |
+| Page           | Content                                                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Overview**   | Active workers, run counts, key metrics                                                                                                           |
+| **Flows**      | Flow definitions with 24h statistics                                                                                                              |
+| **Jobs**       | Job definitions with statistics                                                                                                                   |
+| **Crons**      | Scheduled tasks with next run times                                                                                                               |
+| **Runs**       | Filterable list with status, duration, progress (skipped steps count toward progress)                                                             |
+| **Workers**    | Worker health status and throughput                                                                                                               |
 | **Run Detail** | Interactive SVG DAG visualization, Gantt timeline, input/output inspection; skipped steps render distinctly (dashed/ghost) with their skip_reason |
 
 ## Access Control

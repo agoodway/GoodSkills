@@ -41,7 +41,7 @@ Operational actions are route-aware:
 
 - `PgFlow.Runs.count_queue_messages/4` counts live/archive messages by persisted `(queue_name, message_id)`.
 - `PgFlow.Runs.make_available/2` resets queued task visibility for a run.
-- `PgFlow.Runs.delete/2` transactionally removes a run plus its routed queue/lifecycle data; an absent run is a no-op.
+- `PgFlow.Runs.delete/2` calls `pgflow.delete_run(uuid)` (helpers V07) to remove a run's lifecycle rows and its exact live/archived messages. An absent run is a no-op; an invalid persisted flow slug returns `{:error, :invalid_flow_slug}`. It does not interrupt a running handler. PgFlow has no per-run cancel or fail API; see [operations.md](operations.md).
 
 ## Workers and metrics
 
@@ -53,7 +53,20 @@ PgFlow.Workers.list_tasks(MyApp.Repo, worker_id)
 PgFlow.Metrics.overview(MyApp.Repo)
 ```
 
-Worker health is heartbeat-derived: healthy under 30 seconds, stale through 60 seconds, then dead; stopped/deprecated workers are dead. `PgFlow.Workers.delete/2` deletes only the worker row and clears task attribution via the foreign key—it does not stop a live worker. Use `PgFlow.stop_worker/1` for an operator stop.
+Worker health is heartbeat-derived: healthy under 30 seconds, stale through 60 seconds, then dead; stopped/deprecated workers are dead. `PgFlow.Workers.delete/2` deletes only the worker row and clears task attribution via the foreign key; it does not stop a live worker. Use `PgFlow.stop_worker/1` for an operator stop.
+
+## Local worker controls
+
+These act on worker processes on the current node, not on persisted rows:
+
+```elixir
+{:ok, pid} = PgFlow.start_worker(MyApp.Flows.Import, max_concurrency: 4)
+{:ok, status} = PgFlow.scale_worker(MyApp.Flows.Import, batch_size: 2, timeout: 5_000)
+status_or_nil = PgFlow.check_worker(MyApp.Flows.Import)
+:ok = PgFlow.stop_worker(MyApp.Flows.Import)
+```
+
+Return values, errors, and timeout behavior are in [operations.md](operations.md).
 
 Use raw SQL only for objects not exposed here (migration preflight, exact function signatures, pgmq internals). Validate identifiers and summarize results rather than exposing raw rows.
 

@@ -1,6 +1,6 @@
 # Bootstrap PgFlow
 
-Add PgFlow to an existing Phoenix application. Verify the installed dependency and its documentation first; a path/git checkout may contain capabilities the latest published Hex release does not. PgFlow 0.6.0 (core V03, helpers V07, upstream pgflow 0.17.2) is newer than Hex `0.5.0`.
+Add PgFlow to an existing Phoenix application. Verify the installed dependency and its documentation first; a path/git checkout may contain capabilities the latest published Hex release does not. PgFlow 0.7.0 installs core V03 and helpers V07 (upstream pgflow 0.17.2); 0.6.0 was never published to Hex.
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@ Add PgFlow to an existing Phoenix application. Verify the installed dependency a
 
 ## Install
 
-Add the intended released, git, or path dependency and run `mix deps.get`. Do not silently replace a requested local/git build with a Hex version.
+Add the intended released, git, or path dependency (for Hex, `{:pgflow, "~> 0.7.0"}`) and run `mix deps.get`. Do not silently replace a requested local/git build with a Hex version.
 
 Generate consumer-owned wrapper migrations in this order:
 
@@ -22,7 +22,7 @@ mix ecto.migrate
 mix pgflow.check_schema --repo MyApp.Repo
 ```
 
-`mix pgflow.setup` installs core plus Elixir helpers in a wrapper pinned to explicit versions (`up(version: 3)`, `up(version: 7)` on 0.6.0). Keep wrappers pinned; a bare `up()` installs whatever version the dependency bundles when history is replayed. An already-applied wrapper never reruns after a dependency bump; use the coordinated upgrade workflow in [upgrading.md](upgrading.md).
+`mix pgflow.setup` installs core plus Elixir helpers in a wrapper pinned to explicit versions (`up(version: 3)`, `up(version: 7)` on 0.7.0). Keep wrappers pinned; a bare `up()` installs whatever version the dependency bundles when history is replayed. An already-applied wrapper never reruns after a dependency bump; use the coordinated upgrade workflow in [upgrading.md](upgrading.md).
 
 ## Configure and supervise
 
@@ -45,7 +45,7 @@ children = [
 ]
 ```
 
-Polling is the safest portable default. `:notify` requires compatible pgmq notification functions and retains fallback polling.
+Polling is the safest portable default. `:notify` requires pgmq 1.8.0+ and retains fallback polling; by default its first boot recreates each flow queue's pgmq insert trigger as `DEFERRABLE INITIALLY DEFERRED` (see [config.md](config.md)). Per-module limits go in `worker_options`; unknown keys raise at boot.
 
 Workers compile new definitions and verify existing shapes before polling. Production mismatches fail closed rather than replacing history. Do not treat `PgFlow.FlowStarter.ready?/0` alone as usable readiness; inspect `status/0`, `module_status/1`, `healthy?/0`, and persisted `PgFlow.Workers.healthy?/2`.
 

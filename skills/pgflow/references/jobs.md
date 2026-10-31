@@ -1,6 +1,6 @@
 # PgFlow Job DSL Reference
 
-Jobs are single-step background tasks — a simplified wrapper around flows for when you don't need multi-step DAGs.
+Jobs are single-step background tasks: a simplified wrapper around flows for when you don't need multi-step DAGs.
 
 ## Defining a Job
 
@@ -25,13 +25,13 @@ end
 
 ### @job Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `queue` | atom | required | Unique queue identifier |
-| `max_attempts` | integer | 1 | Maximum retry attempts |
-| `base_delay` | integer | 1 | Initial backoff delay in seconds |
-| `timeout` | integer | 30 | Execution timeout in seconds |
-| `cron` | keyword | nil | Scheduled execution (`schedule:` cron expr, `input:` default input) |
+| Option         | Type    | Default  | Description                                                         |
+| -------------- | ------- | -------- | ------------------------------------------------------------------- |
+| `queue`        | atom    | required | Unique queue identifier                                             |
+| `max_attempts` | integer | 1        | Maximum retry attempts                                              |
+| `base_delay`   | integer | 1        | Initial backoff delay in seconds                                    |
+| `timeout`      | integer | 30       | Execution timeout in seconds                                        |
+| `cron`         | keyword | nil      | Scheduled execution (`schedule:` cron expr, `input:` default input) |
 
 ### perform Block
 
@@ -50,8 +50,8 @@ end
 ```
 
 The handler receives:
-- `input` — the JSON-serializable map passed when enqueuing
-- `ctx` — `PgFlow.Context` struct with run_id, attempt, repo, etc.
+- `input`: the JSON-serializable map passed when enqueuing
+- `ctx`: `PgFlow.Context` struct with run_id, attempt, repo, etc.
 
 ## Compiling Jobs
 
@@ -77,10 +77,10 @@ mix ecto.migrate
      cron: [schedule: "0 9 * * *", input: %{"type" => "daily"}]
 
 # Standard cron expressions
-# "0 9 * * *"    — daily at 9am
-# "@hourly"      — every hour
-# "*/5 * * * *"  — every 5 minutes
-# "0 0 * * 1"    — weekly on Monday
+# "0 9 * * *"   : daily at 9am
+# "@hourly"     : every hour
+# "*/5 * * * *" : every 5 minutes
+# "0 0 * * 1"   : weekly on Monday
 ```
 
 ## Configuration
@@ -96,10 +96,10 @@ config :my_app, PgFlow,
 
 ## When to Use Jobs vs Flows
 
-| Use Case | Use |
-|----------|-----|
-| Single async task (send email, process upload) | **Job** |
-| Multi-step pipeline with dependencies | **Flow** |
-| Scheduled recurring task | **Job** with `cron:` |
-| Scheduled recurring pipeline | **Flow** with `cron:` |
-| Parallel processing of array items | **Flow** with `map` step |
+| Use Case                                       | Use                      |
+| ---------------------------------------------- | ------------------------ |
+| Single async task (send email, process upload) | **Job**                  |
+| Multi-step pipeline with dependencies          | **Flow**                 |
+| Scheduled recurring task                       | **Job** with `cron:`     |
+| Scheduled recurring pipeline                   | **Flow** with `cron:`    |
+| Parallel processing of array items             | **Flow** with `map` step |

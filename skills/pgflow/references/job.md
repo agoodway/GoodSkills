@@ -4,7 +4,7 @@ Scaffold a new PgFlow job module and generate the database migration to compile 
 
 ## Inputs
 
-- **Arg form**: `/pgflow job MyApp.Jobs.SendEmail` — use the provided module name directly.
+- **Arg form**: `/pgflow job MyApp.Jobs.SendEmail`: use the provided module name directly.
 - **No arg**: Ask the user for the job module name. Suggest a name based on the app module detected from `mix.exs`.
 
 ## Workflow
@@ -83,19 +83,19 @@ Print how to enqueue the job:
 
 ## Cron Schedule Reference
 
-| Expression | Meaning |
-|---|---|
-| `"* * * * *"` | Every minute |
-| `"*/5 * * * *"` | Every 5 minutes |
-| `"@hourly"` | Every hour |
-| `"0 9 * * *"` | Daily at 9am |
-| `"0 0 * * 1"` | Weekly on Monday |
-| `"0 0 1 * *"` | Monthly on the 1st |
+| Expression      | Meaning            |
+| --------------- | ------------------ |
+| `"* * * * *"`   | Every minute       |
+| `"*/5 * * * *"` | Every 5 minutes    |
+| `"@hourly"`     | Every hour         |
+| `"0 9 * * *"`   | Daily at 9am       |
+| `"0 0 * * 1"`   | Weekly on Monday   |
+| `"0 0 1 * *"`   | Monthly on the 1st |
 
 ## Guardrails
 
 - Always use `use PgFlow.Job` and the `@job` module attribute
 - Queue slugs follow the same upstream `is_valid_slug` rules as flows: `[A-Za-z0-9_]` only, start with a letter, end with a letter or digit, no `__`, not `run`. The queue name is the lowercased slug, at most 47 characters, and unique across flows and jobs. See [upgrading.md](upgrading.md).
 - All handler return values must be JSON-serializable
-- Do not create the migration file manually — use `mix pgflow.gen.job_migration`
+- Do not create the migration file manually; use `mix pgflow.gen.job_migration`
 - For jobs that call external APIs, set appropriate timeouts and retry limits

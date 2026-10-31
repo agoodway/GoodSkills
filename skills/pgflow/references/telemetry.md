@@ -23,7 +23,7 @@ PgFlow emits telemetry events for monitoring, metrics, and observability.
                               # cascade, or when_exhausted skip)
 ```
 
-Metadata: `flow_slug`, `run_id`, `step_slug`, `skip_reason` (`"condition_unmet"`, `"dependency_skipped"`, or `"handler_failed"`). Delivery is exactly-once per emitter, not globally — handlers needing global exactly-once should dedupe on `{run_id, step_slug}`. See [conditional-steps.md](conditional-steps.md).
+Metadata: `flow_slug`, `run_id`, `step_slug`, `skip_reason` (`"condition_unmet"`, `"dependency_skipped"`, or `"handler_failed"`). Delivery is exactly-once per emitter, not globally; handlers needing global exactly-once should dedupe on `{run_id, step_slug}`. See [conditional-steps.md](conditional-steps.md).
 
 ### Run Events
 
@@ -32,6 +32,20 @@ Metadata: `flow_slug`, `run_id`, `step_slug`, `skip_reason` (`"condition_unmet"`
 [:pgflow, :run, :completed]   # Run completed successfully (skipped steps count as resolved)
 [:pgflow, :run, :failed]      # Run failed (step exhausted retries with when_exhausted: :fail)
 ```
+
+### Startup and Definition Events
+
+```elixir
+[:pgflow, :starter, :module, :attempt]           # FlowStarter tried a module
+[:pgflow, :starter, :module, :success]           # Module registered and worker started
+[:pgflow, :starter, :module, :retry_scheduled]   # Transient failure, retrying with backoff
+[:pgflow, :starter, :module, :failed_permanent]  # Permanent failure (for example schema_incompatible)
+[:pgflow, :starter, :ready]                      # Every module reached a terminal state
+[:pgflow, :flow, :ensured]                       # PgFlow.upsert_flow/2 succeeded
+[:pgflow, :flow, :deleted]                       # PgFlow.delete_flow/1 succeeded
+```
+
+`:ready` fires even when some modules failed permanently; alert on `:failed_permanent`.
 
 ## Attaching Handlers
 

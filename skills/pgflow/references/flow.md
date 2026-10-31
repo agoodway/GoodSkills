@@ -4,7 +4,7 @@ Scaffold a new PgFlow flow module with step definitions and generate the databas
 
 ## Inputs
 
-- **Arg form**: `/pgflow flow MyApp.Flows.ProcessOrder` — use the provided module name directly.
+- **Arg form**: `/pgflow flow MyApp.Flows.ProcessOrder`: use the provided module name directly.
 - **No arg**: Ask the user for the flow module name. Suggest a name based on the app module detected from `mix.exs`.
 
 ## Workflow
@@ -97,19 +97,19 @@ Print how to start the flow:
 
 When generating steps, apply these patterns:
 
-| User describes... | Generate... |
-|---|---|
-| Sequential actions | Steps with linear `depends_on` chain |
-| "Then do A and B at the same time" | Two steps with same `depends_on` (parallel) |
-| "For each item..." | `map` step with `:array` option |
-| "Wait for all to finish then..." | Step with `depends_on` listing all parallel steps |
-| External API call | Step with longer `timeout: 120` |
-| Something that might fail | Step with higher `max_attempts: 5` |
+| User describes...                  | Generate...                                       |
+| ---------------------------------- | ------------------------------------------------- |
+| Sequential actions                 | Steps with linear `depends_on` chain              |
+| "Then do A and B at the same time" | Two steps with same `depends_on` (parallel)       |
+| "For each item..."                 | `map` step with `:array` option                   |
+| "Wait for all to finish then..."   | Step with `depends_on` listing all parallel steps |
+| External API call                  | Step with longer `timeout: 120`                   |
+| Something that might fail          | Step with higher `max_attempts: 5`                |
 
 ## Guardrails
 
 - Always use `use PgFlow.Flow` and the `@flow` module attribute
 - Queue slugs must match upstream `is_valid_slug`: `[A-Za-z0-9_]` only, start with a letter, end with a letter or digit, no `__`, at most 128 characters, and not `run`. The queue name is the lowercased slug, at most 47 characters, and unique across flows and jobs. Compile-time failures are fixed by renaming the slug in code. See [upgrading.md](upgrading.md).
 - All handler return values must be JSON-serializable
-- Do not create the migration file manually — use `mix pgflow.gen.flow_migration`
+- Do not create the migration file manually; use `mix pgflow.gen.flow_migration`
 - If the flow has a `map` step, the array source step must return a list
