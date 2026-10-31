@@ -10,9 +10,9 @@ Add PgFlow to an existing Phoenix application. Verify the installed dependency a
 
 ## Install
 
-Add the intended released, git, or path dependency (for Hex, `{:pgflow, "~> 0.7.0"}`) and run `mix deps.get`. Do not silently replace a requested local/git build with a Hex version.
+Add the intended released, git, or path dependency (for Hex, `{:pgflow, "~> 0.7.0"}`) and run `mix deps.get`. Do not silently replace a requested local/git build with a Hex version. Also depend on `phoenix`, `phoenix_live_view`, and `livefilter`: they are optional in pgflow's `mix.exs`, but its dashboard modules compile unconditionally.
 
-Generate consumer-owned wrapper migrations in this order:
+Generate consumer-owned wrapper migrations in this order. Extensions and pgmq must migrate before the setup wrapper, both on first install and on every replay from an empty database:
 
 ```bash
 mix pgflow.gen.postgres_extensions_migration # add --no-cron if unsupported
@@ -22,7 +22,11 @@ mix ecto.migrate
 mix pgflow.check_schema --repo MyApp.Repo
 ```
 
-`mix pgflow.setup` installs core plus Elixir helpers in a wrapper pinned to explicit versions (`up(version: 3)`, `up(version: 7)` on 0.7.0). Keep wrappers pinned; a bare `up()` installs whatever version the dependency bundles when history is replayed. An already-applied wrapper never reruns after a dependency bump; use the coordinated upgrade workflow in [upgrading.md](upgrading.md).
+`mix pgflow.gen.pgmq_migration` downloads the pgmq SQL bundle (default 1.11.0, sha256-checked) from GitHub at generation time, so it needs network access once. It writes `priv/pgflow/pgmq/pgmq-<version>.sql` plus an `install_pgmq` migration; commit both, and `mix ecto.migrate` then runs offline.
+
+`mix pgflow.setup` installs core plus Elixir helpers in a wrapper pinned to explicit versions (`up(version: 3)`, `up(version: 7)` on 0.7.0). Keep wrappers pinned; a bare `up()` installs whatever version the dependency bundles when history is replayed. Wrappers generated before 0.7.0 are bare; pin them as in [upgrading.md](upgrading.md). An already-applied wrapper never reruns after a dependency bump; use the coordinated upgrade workflow in [upgrading.md](upgrading.md).
+
+When the repo sets a custom `priv:` (or exists only in `MIX_ENV=test`, as in many libraries), run the generators with that `MIX_ENV` and check where each file landed. `mix pgflow.setup` can fall back to `priv/repo` and `mix pgflow.gen.pgmq_migration` defaults to `priv/repo/migrations`; pass `--migrations-path` to either. `mix pgflow.gen.postgres_extensions_migration` has no path flag, so move its file. A library that leaves the schema to its host does not ship these migrations; see [upgrading.md](upgrading.md#upgrade-a-library).
 
 ## Configure and supervise
 
@@ -68,4 +72,6 @@ mix ecto.migrate
 {:ok, run} = PgFlow.get_run_with_states(run_id)
 ```
 
-Run the gates in [compatibility.md](compatibility.md). Without `PGFLOW_REQUIRE_DB=1`, database tests may be silently excluded.
+Scripts that start PgFlow without booting the app (for example `mix run --no-start`) must call `Application.ensure_all_started(:pgflow)` first; it starts `PgFlow.FlowRegistry`, which `PgFlow.FlowStarter` needs.
+
+Run the consumer gates in [compatibility.md](compatibility.md).

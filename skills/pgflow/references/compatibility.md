@@ -1,13 +1,15 @@
 # Verification and upstream compatibility
 
-## Deployment gates
+## Consumer verification
 
-```bash
-mix pgflow.check_schema --repo MyApp.Repo
-PGFLOW_REQUIRE_DB=1 mix test
-PGFLOW_REQUIRE_DB=1 mix test --only migration
-mix quality
-```
+Gates for an app or library that uses PgFlow:
+
+1. `mix pgflow.audit_slugs`: `no slug findings`. Needs an installed pgflow schema; without one it crashes on `relation "pgflow.flows" does not exist`.
+2. `mix pgflow.check_schema`: `All checks passed!`. Without a schema it prints a cascade of failures starting with `pgflow schema does not exist`.
+3. Replay from empty: drop, create, and migrate a scratch database (`mix ecto.drop --force-drop` when `pg_cron` is installed), then rerun the schema check. See [upgrading.md](upgrading.md).
+4. The project's own test suite.
+
+Pass `--repo MyApp.Repo` when several repos are configured. Libraries whose repo exists only in test run these as `MIX_ENV=test mix ... --repo MyLib.TestRepo`.
 
 When the release includes a database restore, branch replacement, major-version
 project cutover, or point-in-time recovery, also compare source and target
@@ -15,7 +17,19 @@ project cutover, or point-in-time recovery, also compare source and target
 PgFlow schema compatibility and worker heartbeats do not cover application-owned
 pg_cron registrations.
 
+## PgFlow repository verification
+
+Only for changes to pgflow itself, run in the pgflow checkout:
+
+```bash
+PGFLOW_REQUIRE_DB=1 mix test
+PGFLOW_REQUIRE_DB=1 mix test --only migration
+mix quality
+```
+
 Run migration tests separately because they mutate the shared test schema. Without `PGFLOW_REQUIRE_DB=1`, an unreachable database can exclude integration tests while the command succeeds.
+
+## What the schema check covers
 
 The schema gate checks core/helpers version floors, required tables and pgmq, the five-argument `start_tasks(text,bigint[],uuid,text,text)`, absence of the legacy three-argument and four-argument claims, `ensure_flow_compiled(text,jsonb,text,jsonb)`, `register_worker(uuid,text,text,text)`, `delete_run(uuid)`, queue constraints, task statuses, and the eight-field `step_task_record` with `attempts_count`. Worker bootstrap checks a narrower runtime-critical subset (it does not cover `delete_run`); it does not replace this gate.
 
@@ -43,6 +57,6 @@ MIX_ENV=test mix run --no-start test/support/upstream/run.exs \
 
 The full harness needs Git, `psql`, Node, pnpm, Supabase CLI, and server pgTAP. Report passes, unresolved probes, and skips separately. Do not claim universal JSON parity: pinned TypeScript coerces falsy handler output while Elixir preserves `false`, `0`, and `""`. Full notify acceptance also requires a pgmq version providing notify-insert support; fallback polling is a distinct profile.
 
-Report compatibility as upstream pgflow 0.17.2 (`baa9e43f5f9122133deacbc3e8ffc80e284b4f50`) through `PgFlow.compatibility_report/0`. `PgFlow.core_version/0` remains the legacy string `"0.5.0"` and does not track the package. Pinned TypeScript 0.17.2 still coerces falsy handler output; Elixir preserves `false`, `0`, and `""`.
+Report compatibility as upstream pgflow 0.17.2 (`baa9e43f5f9122133deacbc3e8ffc80e284b4f50`) through `PgFlow.compatibility_report/0`. `PgFlow.core_version/0` and the report's `core_version_string` remain the legacy string `"0.5.0"` and track neither the package nor the schema; read `bundled_core_version` and `bundled_helpers_version` instead. Pinned TypeScript 0.17.2 still coerces falsy handler output; Elixir preserves `false`, `0`, and `""`.
 
 Runtime-only divergences add nothing to the shared schema: `worker_options`, `start_worker/2`, and `scale_worker/2` play the role of the TypeScript worker's `maxConcurrent` and `batchSize` (upstream has no runtime scaling), and upstream never uses LISTEN/NOTIFY. The deferred pgmq notify trigger that `:notify` mode installs does not affect TypeScript workers or producers on shared flow queues, but an SQL or TypeScript caller that sends and then deletes a flow in one transaction must run `SET CONSTRAINTS pgmq.trigger_notify_queue_insert_listeners IMMEDIATE` first.
