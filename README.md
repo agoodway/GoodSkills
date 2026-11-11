@@ -14,6 +14,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 - `skills/inspector-review-update/SKILL.md`: OpenSpec quick review + auto-patch (`--ask` or `--auto` for design questions)
 - `skills/implement-openspec-changes/SKILL.md`: apply, verify, review, and commit OpenSpec changes via subagents
 - `skills/openspec-ship/SKILL.md`: rebase, apply, verify, review, archive, commit, and open one draft PR for OpenSpec changes
+- `skills/openspec-to-tickets/SKILL.md`: break OpenSpec changes into tracer-bullet tickets on GitHub, Linear, Jira, or local markdown
 - `skills/document/SKILL.md`: focused documentation generation (inline, API, guide, external)
 - `skills/understand/SKILL.md`: multi-specialist codebase understanding analysis
 - `skills/elixir-genius/SKILL.md`: Elixir/Phoenix/LiveView architecture and best practices
