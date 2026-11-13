@@ -8,6 +8,7 @@ Portable agent skills and matching review subagents for Claude Code, OpenCode, a
 
 - `skills/review-work/SKILL.md`: multi-specialist code review skill
 - `skills/goodreview/SKILL.md`: portable multi-specialist code review using generic subagents
+- `skills/goodreview-pr-reply/SKILL.md`: post a goodreview report to a pull request as an overview comment and inline review comments
 - `skills/scratchpad/SKILL.md`: gitignored temporary project scratchpad workflow
 - `skills/git/SKILL.md`: git commit and pull request workflow commands
 - `skills/inspector/SKILL.md`: OpenSpec inspection and reconciliation workflows
@@ -303,7 +304,7 @@ Ask your runtime to run the skill:
 /elixir-genius
 ```
 
-Or focus the review on a path or area:
+Or focus the review on a path or area, or give `goodreview` a base ref to review committed work:
 
 ```text
 /review-work lib/my_app/accounts
@@ -311,11 +312,14 @@ Or focus the review on a path or area:
 /review-work docs setup guide
 /goodreview lib/my_app/accounts
 /goodreview frontend settings modal
+/goodreview main
 ```
 
 The skill gathers git context, selects specialists based on changed files, launches matching agents where supported, runs a Codex fresh-eyes/meta-analysis pass when available, and returns a prioritized review report.
 
-`/goodreview` is the portable engine: it selects roles from the diff, launches generic subagents with skill-owned briefs, and prints a prioritized report. It does not require named custom agents. On Codex, Fresh Eyes and meta-analysis use the Grok CLI in single-turn headless mode; on Grok, they use Codex MCP. If the external provider is unavailable, the skill falls back to a generic or separately labeled host pass.
+`/goodreview` is the portable engine: it selects roles by what the change puts at risk, launches generic subagents with skill-owned briefs, has a second model try to refute each finding, and prints a verdict-first report of what survived. It does not require named custom agents. Pass a base ref (`/goodreview main`) to review committed work. Fresh Eyes and verification run on a model other than the host: Claude hosts use Codex MCP or the Grok CLI, Codex hosts use the Grok or Claude CLI, and Grok hosts use Codex MCP or the Claude CLI. If no external provider is usable, the skill falls back to a generic or separately labeled host pass.
+
+After a review, `/goodreview-pr-reply [selection prompt]` posts the report to the branch's pull request as one review: an overview comment plus an inline comment per finding. The prompt picks which findings to post (`/goodreview-pr-reply blockers only`); the skill shows the draft and waits for approval before posting.
 
 ## Notes
 
