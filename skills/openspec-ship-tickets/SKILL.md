@@ -173,7 +173,7 @@ UNFIXED:
 
 Follow the `goodreview` skill on the uncommitted changes. Do not edit, commit, or create issues. If this subagent cannot spawn its own subagents, it uses that skill's sequential fallback and still returns the full report.
 
-A report is `STATUS: done` even when commit readiness is not ready. Failure to produce the report after recovery is `STATUS: blocked`; do not invent a review.
+A report is `STATUS: done` even when its verdict is not `Ship`. Failure to produce the report after recovery is `STATUS: blocked`; do not invent a review.
 
 Paste the full goodreview report, then:
 
@@ -183,7 +183,7 @@ STATUS: done|blocked
 
 ### 5. Fix every review issue
 
-Same contract as step 3, for every item under Critical (must fix), Warnings (should fix), and Suggestions (consider). Pass the goodreview report unchanged, with `Expected issue count: N`.
+Same contract as step 3, for every numbered item under Findings, confirmed or plausible. Pass the goodreview report unchanged, with `Expected issue count: N`.
 
 Get focused re-review in step 4 for substantive repairs and resolve new findings here. Repeat ticket verification through steps 2 and 3 when behavior changes. This subagent confirms required validation evidence, or runs missing validation, before advancing to commit, even when the review has zero issues.
 

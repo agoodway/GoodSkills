@@ -1,212 +1,244 @@
 ---
 name: goodreview
-description: Use when the user says "/goodreview", "goodreview", or "run goodreview" and wants a multi-specialist review of uncommitted changes that does not depend on named custom agents.
+description: Use when the user says "/goodreview", "goodreview", or "run goodreview" and wants a multi-specialist review of uncommitted changes, or of a branch against a base ref, that does not depend on named custom agents.
 ---
 
 # goodreview
 
-Execute a multi-specialist review of uncommitted changes using generic subagents and the briefs in [references/specialists.md](references/specialists.md). This skill does not use named custom agents.
+Review a change for what will break in production. Specialists raise candidate findings from the briefs in [references/specialists.md](references/specialists.md), a second model tries to refute each one, and the report carries only what survives. Reviewers are generic subagents; this skill does not use named custom agents or agent directories.
 
 ## Arguments
 
 ```text
-/goodreview [optional file/area to focus on]
+/goodreview [base ref | file or area to focus on]
 ```
 
-The optional argument may be a file path, directory, feature area, or short review focus. If omitted, review all uncommitted changes (staged, unstaged, and untracked).
+- No argument: review all uncommitted changes (staged, unstaged, and untracked).
+- A git ref (branch, tag, or commit): review everything since its merge-base with `HEAD`, committed and uncommitted.
+- Anything else: a focus within the uncommitted changes. It may be a file path, directory, feature area, or short review focus.
+
+An argument that is both an existing path and a git ref is a path.
 
 ## Phase 1: Scope
 
 Run these commands as separate shell calls:
 
 ```bash
-git diff HEAD --stat
-git diff --staged --stat
 git status --porcelain
 git branch --show-current
+git diff HEAD --stat
+git diff --staged --stat
 ```
+
+For a base ref, also run these, passing the ref as one argument:
+
+```bash
+git merge-base [ref] HEAD
+git diff [merge-base] --stat
+```
+
+The **base** is that merge-base, or `HEAD` when no ref was given. The **change** is everything in the working tree that differs from the base, plus untracked files.
 
 **Stop and tell the user** if:
 
 - This is not a git repository, or a git command fails
-- The working tree is clean and there is no focus argument
+- The change is empty and there is no focus argument. When the working tree is clean, say that `/goodreview [base ref]` reviews committed work
 - A focus path was given and it does not exist
 
 Otherwise identify:
 
-- Changed files and whether they are staged, unstaged, or untracked
+- Changed files and whether they are committed, staged, unstaged, or untracked
 - Languages and frameworks
 - Layers: backend, frontend, database, tests, docs, infra, config
-- Risk: auth, migration, public API, user-visible UI, concurrency, performance, docs-only
+- Risk: auth, money, migration, public API, user-visible UI, concurrency, performance, docs-only
+- Size: files changed and lines added plus removed, from the `--stat` totals plus the full length of each untracked file
 
-If a focus argument was provided, inspect that path unless surrounding context is required. Include untracked files in scope.
+If a focus argument was provided, inspect that path unless surrounding context is required.
 
-## Independent second-opinion passes
+## Second opinion
 
-Fresh Eyes (Phase 2) and meta-analysis (Phase 4) use a model other than the host when the required integration is available. Determine the host from explicit system or runtime identity; do not infer it only from which tools or commands are installed. Choose the second-opinion provider once per review, then use a new stateless session for each pass.
+Fresh Eyes (Phase 2) and verification (Phase 4) run on a model other than the host when one is reachable. Determine the host from explicit system or runtime identity, such as the system prompt or `CLAUDECODE=1` in a Claude Code session; do not infer it only from which tools or commands are installed. Choose the provider once per review, then use a new stateless session for each pass.
 
-### Codex host: Grok headless
+Take the first usable provider in the host's row:
 
-Run each pass as a new Grok CLI process in single-turn headless mode:
+| Host | Provider order |
+|---|---|
+| Claude | Codex through MCP, Grok headless, Claude subagent on another model |
+| Codex | Grok headless, Claude headless |
+| Grok | Codex through MCP, Claude headless |
+| Other or unknown | Codex through MCP, Grok headless, Claude headless |
 
-```text
-grok --cwd [repository root] --permission-mode dontAsk --sandbox strict --tools read_file,list_dir,grep --deny 'MCPTool(*)' --disable-web-search --no-subagents --output-format plain -p "[pass prompt]"
-```
+Never select the provider that is the host. If nothing in the row is usable, fall back to a generic subagent or a separate host pass.
 
-Pass the prompt as one argument using an argument-safe execution mechanism; never allow prompt, diff, path, or user content to become shell syntax. Each prompt is self-contained:
+Every pass prompt is self-contained and includes the relevant diff, because the headless providers cannot run `git diff`:
 
-- Fresh Eyes: Shared finding contract, Fresh Eyes brief, scope packet, and relevant git diff
-- Meta-analysis: meta-analysis prompt and the collected specialist findings
+- Fresh Eyes: Shared finding contract, Fresh Eyes brief, scope packet, and the full diff
+- Verification: Shared finding contract, verification prompt, numbered candidate findings, scope packet, and the diff of only the files the candidates cite. The scope packet still lists every changed file, so the verifier can read the others
 
-The tool allowlist lets Grok inspect the actual changed files while withholding edit and shell tools. Include the relevant diff in the prompt because Grok cannot run `git diff`. Keep MCP and web access disabled, and run Grok inside both its strict sandbox and any read-only sandbox supplied by the host. Do not weaken these controls to make a failed pass run.
+Pass the prompt using an argument-safe execution mechanism; never allow prompt, diff, path, or user content to become shell syntax. Do not install, update, or authenticate a provider as part of `goodreview`, and do not weaken a provider's read-only controls to make a failed pass run.
 
-Do not install, update, or authenticate Grok as part of `goodreview`. If `grok -p` fails, returns no usable review, or is unavailable, fall back to a generic subagent or a separate host pass. Do not substitute a Codex session and describe it as an external Grok opinion.
+The commands, read-only controls, availability checks, and timeout for each provider are in [references/providers.md](references/providers.md). Read its availability section, then only the section for the provider you are about to use.
 
-### Grok host: Codex through MCP
-
-Use the first available Codex session tool:
-
-- `mcp__codex__codex`
-- `codex__codex`
-- `codex_codex`
-
-Call it with the self-contained pass prompt. If the tool accepts them, set `sandbox` to `read-only` and `approval-policy` to `never`.
-
-If no Codex session tool is available, fall back to a generic subagent or a separate host pass. Do not substitute Grok and describe it as an external Codex opinion.
-
-### Other or unknown host
-
-Prefer an available Codex session tool, then Grok through `grok -p`. Never select a provider known to be the host. If neither external provider is usable, fall back to a generic subagent or a separate host pass.
-
-Record the provider actually used for the report. Label fallbacks accurately; a host pass is independent in role, but is not a cross-model second opinion.
+Record the provider actually used and label it accurately in the report: `Grok CLI`, `Codex via MCP`, `Claude CLI`, `Claude [model] subagent (cross-tier)`, `generic subagent`, or `host fallback`. Only the first three are cross-vendor second opinions when the host is a different vendor; never describe a fallback as one.
 
 ## Phase 2: Select roles and launch
 
-Always include at least three roles for code changes. Always add **Fresh Eyes**.
+Pick roles by what the change puts at risk. Every added role is one whose failure mode the change can actually reach.
 
-| Change type | Roles |
+Baseline, by what the code is:
+
+| Change | Role |
 |---|---|
-| Any code | Code quality, Security, Tests |
-| Elixir/Phoenix | Elixir, Security, Tests |
-| Frontend | Frontend, UI/a11y, Tests |
-| Schema/SQL | Database, Security, Tests |
+| Elixir/Phoenix code | Elixir |
+| Frontend components or client state | Frontend |
+| Any other code | Correctness |
 | Docs only | Technical writing, Accuracy |
-| Tests only | QA execution, Tests, Code quality |
-| Cross-layer | Code quality, Security, Tests, Architecture |
 
-Add Architecture when the diff spans layers, public APIs, infra, or data flow.
-Add QA execution when tests, lint, or CI should actually be run.
+Add, by risk:
 
-Read [references/specialists.md](references/specialists.md). For each selected role except Fresh Eyes, launch one generic subagent in parallel. Run Fresh Eyes via Independent pass. Each generic-subagent prompt contains, in this order:
+| The change touches | Role |
+|---|---|
+| Auth, sessions, permissions, secrets, new endpoints, or untrusted input | Security |
+| Schema, migrations, SQL, or the shape of a query | Database |
+| User-visible markup or interaction | UI/a11y |
+| Several layers, a public API, infra, or data flow | Architecture |
+| Behavior that can regress silently (authz, money, parsers, migrations, public APIs), or the tests themselves | Tests |
+| Code that a cheap project check command covers | QA execution |
+
+Always add **Fresh Eyes**.
+
+Read [references/specialists.md](references/specialists.md). The selected roles run in three places:
+
+- **QA execution** runs in the host, not in a subagent. Follow its brief yourself. Start its commands first, in the background when the runtime supports that, and collect the results after the reviewers return.
+- **Fresh Eyes** runs through the second-opinion provider, at the same time as the reviewers.
+- **Every other role** runs in a generic subagent, as described below.
+
+### Reviewers
+
+A change is **small** when it is at most 200 changed lines across at most 5 files and its Phase 1 risk includes none of auth, money, migration, public API, or concurrency.
+
+- Small change: launch one generic subagent that holds every selected role. Its prompt carries each of those roles' briefs.
+- Any other change: launch one generic subagent per role, all in parallel. On a host where parallel means several tool calls in one message, such as Claude Code, send them in one message.
+
+If the runtime lets you choose a subagent's model, a reviewer that holds only UI/a11y, Technical writing, or Accuracy may run on a smaller, faster model. Every other reviewer runs on the host's model: verification removes false findings but cannot recover a missed one.
+
+Each reviewer prompt contains, in this order:
 
 1. The Shared finding contract
-2. That role's brief
+2. The brief for each role the reviewer holds
 3. A scope packet:
 
 ```text
-Role: [name]
+Roles: [name, or several names for a small change]
 Branch: [branch]
+Base: [base]
 Focus: [optional focus or none]
+Risk: [risks identified in Phase 1]
+Diff command: git diff [base] -- [paths]
 Changed files:
-- [path]
-Read the actual files, not only the git diff.
-Return findings using the shared finding contract.
+- [path] ([committed | staged | unstaged | untracked])
+Not listed: [N] changed files outside these roles' domains
 ```
 
-Do not look up named custom agents. Do not use agent directories.
+List only the changed files in the reviewer's domain, and use the same paths in its diff command:
+
+| Role | Files |
+|---|---|
+| Elixir | Elixir source, templates, and migrations |
+| Frontend | Client-side source |
+| Database | Migrations, schemas, and files whose queries changed |
+| UI/a11y | Templates, components, and styles |
+| Technical writing, Accuracy | Documentation |
+| Correctness, Security, Tests, Architecture, Fresh Eyes | Every changed file |
+
+A reviewer holding several roles gets the union of their files.
 
 If the runtime cannot spawn subagents, run the briefs sequentially in this session and keep each output labeled with the role name.
 
-Each specialist must:
+## Phase 3: Merge
 
-- Read the changed files, not just the diff
-- Stay in its domain
-- Cite `file:line` (or supporting files for repo-wide issues)
-- Rate severity: Critical, High, Medium, Low
-- Suggest a specific fix, or state `No findings`
+In the host, combine the reviewer, QA execution, and Fresh Eyes results into one numbered list of candidate findings:
 
-## Phase 3: Synthesis
+- Merge findings that describe the same failure, keeping every role that raised it
+- Keep each candidate's severity, `file:line`, failure scenario, and fix
+- Note where two roles disagree about the same code
 
-After collecting specialist reports, synthesize:
+With no candidates, skip Phase 4.
 
-- Deduplicate overlapping findings
-- Flag conflicts and unresolved disagreements
-- Identify issues that span domains
-- Keep original role attribution
+## Phase 4: Verification
 
-Use a generic subagent if spawning is available; otherwise do this pass in the host.
-
-## Phase 4: Meta-analysis
-
-Run a second independent pass over the combined findings. Prompt:
+Run one pass through the second-opinion provider that tries to refute every candidate. Prompt:
 
 ```text
-Review this multi-specialist analysis. What patterns do you see differently? What risks were not considered? How would you re-prioritize these findings? Challenge the assumptions. Identify findings that are over-prioritized, under-prioritized, unsupported, or missing.
+Try to refute each numbered candidate finding below by reading the code it cites. Trace its failure scenario: can the trigger actually occur, does the wrong behavior follow, did this change introduce or expose it, and does a guard, constraint, or caller elsewhere already prevent it? Apply the reporting bar in the shared finding contract.
+
+Return one row per candidate:
+
+number | verdict | severity | reason
+
+verdict is exactly one of:
+- CONFIRMED: you traced the scenario and it holds
+- PLAUSIBLE: you could neither confirm nor refute it; say what is missing
+- REFUTED: cite the file:line that prevents it, or the part of the reporting bar it fails
+
+severity is Blocker or Should fix, corrected if the scenario's impact was overstated or understated.
 ```
 
-Run this pass via Independent pass. Include the collected specialist findings in the prompt.
+Drop every REFUTED candidate and count it. Carry CONFIRMED and PLAUSIBLE candidates into the report with the verifier's severity.
 
 ## Phase 5: Report
 
-Print the report in chat only. Do not write a file. Do not create issues, commit, or edit files.
+Print the report in chat only. `goodreview` is read-only: applying fixes, writing files, creating issues, and committing are later user requests.
 
-Map specialist severity onto the report buckets:
+````markdown
+## Verdict: [Ship | Fix first | Don't ship]
 
-- Critical → Critical (must fix). Any Critical finding makes commit readiness **Not ready**
-- High or Medium → Warnings (should fix)
-- Low → Suggestions (consider)
+[One sentence giving the reason.]
+
+## What changed
+
+[The smallest view that shows the shape of the change: a diff sketch of the call tree, file tree, or control flow.]
+
+## Findings
+
+### 1. [Title] — [Blocker | Should fix]
+
+`[file:line]` · [Role, Role] · [confirmed | plausible] by [provider]
 
 ```text
-=== GOODREVIEW: [Target] ===
-Branch: [branch] | Files: [N] changed | Roles: [list]
-
-SPECIALIST FINDINGS
-[Role]: [key findings with file:line]
-
-FRESH EYES — [Grok CLI | Codex via MCP | generic subagent | host fallback]
-[Independent findings]
-
-SECOND-OPINION META-ANALYSIS — [provider]
-[Independent analysis and re-prioritization]
-
-CROSS-SPECIALIST INSIGHTS
-[Systemic issues, conflicts, overlapping patterns]
-
-PRIORITIZED ISSUES
-
-Critical (must fix):
-- [Issue] - [file:line] - Found by: [Role]
-  Fix: [specific example]
-
-Warnings (should fix):
-- [Issue] - [file:line] - Found by: [Role]
-  Fix: [specific example]
-
-Suggestions (consider):
-- [Issue] - [file:line] - Found by: [Role]
-  Fix: [specific example]
-
-COMMIT READINESS: Ready | Not ready - N critical issues remain
+[failure scenario as a short trace: trigger → wrong behavior → who is affected]
 ```
 
-If there are no findings, say so and list residual risks or testing gaps.
+```diff
+[the fix]
+```
+
+## Evidence
+
+- `[command]` → [pass and fail counts]
+- [N] raised → [C] confirmed, [P] plausible, [R] refuted and dropped
+
+## Merge Danger
+
+**Door:** [one-way | two-way] — [why]
+
+**Blast Radius:** [one word] — [what could be affected]
+
+Roles: [list] · Second opinion: [provider label]
+````
+
+- **Verdict:** `Don't ship` for a confirmed Blocker or a check this change broke. `Fix first` for any other finding. `Ship` when there are none.
+- **Findings:** Blockers first, numbered consecutively, one entry per finding with every role that raised it on the attribution line. When the fix is larger than a few lines, state it in one sentence instead of a diff. With no findings, the section reads `None above the bar.`
+- **Evidence:** every command QA execution ran, with failures this change caused separated from pre-existing ones. If no checks ran, say why.
+- **Merge Danger:** a one-way door cannot be walked back after it ships (destructive migrations, sent money or messages, published APIs); a two-way door is cheap to roll back. Blast radius is the widest scope a failure of this change could reach.
 
 ## Dry-run selection
 
 Use these checks while executing the skill (not while authoring it):
 
-- Elixir-only diff → Elixir, Security, Tests, Fresh Eyes
-- Docs-only diff → Technical writing, Accuracy, Fresh Eyes
-
-## Rules
-
-- Use parallel generic subagents when the runtime supports them; otherwise sequential labeled briefs
-- On Codex, use Grok through `grok -p`; on Grok, use Codex MCP; otherwise use an external provider that is not the host
-- Use a new stateless external session for Fresh Eyes and meta-analysis, and label the provider actually used
-- Every finding includes `file:line` or supporting file references, plus a suggested fix
-- Run each git command as its own shell call
-- Do not create issues, commit, or edit files
-- Do not look up named custom agents
-- Applying fixes is a later user request, not part of `/goodreview`
+- Three-line bug fix in a pure Elixir function, with `mix test` available → one reviewer holding Elixir; QA execution in the host; Fresh Eyes
+- 60-line change to a LiveView form and its template → one reviewer holding Elixir and UI/a11y; QA execution in the host; Fresh Eyes
+- Phoenix migration plus a new authenticated endpoint → separate reviewers for Elixir, Security, Database, and Tests; QA execution in the host; Fresh Eyes
+- Short docs-only diff → one reviewer holding Technical writing and Accuracy; Fresh Eyes
 
 $ARGUMENTS

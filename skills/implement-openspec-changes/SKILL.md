@@ -26,7 +26,7 @@ Give each child the repository path, change ID, scope/baseline, these execution/
 | 1. Apply | Follow `openspec-apply-change`. Return task progress (`N/M`). Stop if paused, blocked, or required tasks remain incomplete; already-complete tasks proceed to verification. |
 | 2. Verify | Follow `openspec-verify-change` and run relevant project checks. Return the full scorecard and every Critical, Warning, and Suggestion. |
 | 3. Fix verification | Skip if no findings. Otherwise resolve findings under the repair rules below and rerun `openspec-verify-change`. |
-| 4. Review | Follow `goodreview`, including its specialist briefs, scoped to this change's uncommitted work. Return the full report and commit readiness. |
+| 4. Review | Follow `goodreview`, including its specialist briefs, scoped to this change's uncommitted work. Return the full report and its verdict. |
 | 5. Fix review | Skip if no findings. Otherwise resolve findings under the repair rules. Run relevant tests/checks after edits and rerun OpenSpec verification if behavior or task coverage changed. Re-review affected areas when needed to substantiate resolution. |
 | 6. Commit | Follow `git`'s `/git commit` workflow, limited to this change. Inspect the exact commit diff; exclude unrelated content, including pre-staged edits and mixed-file hunks, while preserving their staging state. Create atomic conventional commits without AI attribution; return hashes, or `nothing to commit`. Omit push/PR prompts and actions unless requested. |
 
